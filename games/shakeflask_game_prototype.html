@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>진탕 플라스크 배양 시뮬레이터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0e1420;color:#e8ecf4;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;}
+  #app{display:flex;flex-direction:row;max-width:1200px;margin:0 auto;}
+  #gameWrap{width:900px;flex:none;}
+  #manualPanel{width:300px;flex:none;background:#f7f5ef;color:#1c2130;padding:16px;box-sizing:border-box;font-size:13px;line-height:1.55;overflow-y:auto;max-height:650px;}
+  #manualPanel h2{font-size:16px;margin:0 0 4px;color:#0b2547;}
+  #manualIntro{font-size:12.5px;color:#5a5f70;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #ddd6c4;}
+  .mstep{padding:10px 10px;margin-bottom:6px;border-radius:8px;border:1px solid #e2ddce;background:#fff;}
+  .mstep.current{border-color:#1c8a6b;background:#eaf6f0;}
+  .mstep.done{opacity:.55;}
+  .mstep .mtitle{font-weight:700;font-size:12.5px;display:flex;justify-content:space-between;}
+  .mstep .mdesc{margin-top:6px;font-size:12px;color:#3d4150;}
+  .mstep.done .mdesc{display:none;}
+  .mstep.upcoming .mdesc{display:none;}
+  #summaryBox{margin-top:14px;padding:10px;border-radius:8px;background:#0b2547;color:#fff;font-size:12.5px;display:none;}
+  .note{max-width:900px;margin:14px auto 0;padding:0 4px;font-size:12.5px;color:#9aa2b5;}
+  .devBox{max-width:900px;margin:14px auto 40px;border:1.5px solid #7a3330;background:#2a1416;border-radius:10px;padding:14px 16px;}
+  .devBox h3{margin:0 0 4px;color:#ff9b8f;font-size:14px;}
+  .devBox .devIntro{font-size:12px;color:#e0b8b3;margin-bottom:10px;}
+  .devList{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:6px;}
+  .devCase{background:#341b1c;border:1px solid #5c2a28;border-radius:8px;padding:10px 12px;}
+  .devCase .dtitle{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:12.5px;color:#ffd7d0;}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;}
+  .badge.major{background:#7a2d2d;color:#ffd7d0;}
+  .badge.minor{background:#7a5a2d;color:#ffe9c9;}
+  .devCase p{margin:6px 0 0;font-size:12px;color:#d8c3c0;line-height:1.55;}
+  #resultOverlay{position:fixed;inset:0;background:rgba(10,12,18,.82);display:none;align-items:center;justify-content:center;z-index:50;}
+  #resultCard{background:#fff;color:#1c2130;border-radius:14px;padding:28px 32px;max-width:420px;text-align:center;}
+  #resultCard h2{margin:0 0 6px;font-size:26px;}
+  #resultCard .grade{font-size:48px;font-weight:800;margin:10px 0;}
+  #resultCard ul{text-align:left;font-size:13px;line-height:1.6;margin:12px 0 0;padding-left:18px;}
+  #resultCard button{margin-top:16px;padding:10px 20px;border-radius:8px;border:none;background:#0b2547;color:#fff;font-weight:700;cursor:pointer;}
+  input.gameInput{font-size:16px;padding:6px 8px;border-radius:6px;border:1px solid #6a7690;width:120px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gameWrap"><div id="gameCanvas"></div></div>
+  <div id="manualPanel">
+    <h2>🧫 진탕 플라스크 배양</h2>
+    <div id="manualIntro">Seed Train 초기 확장 단계로, 해동·회복된 세포를 더 큰 배양 규모로 옮겨 진탕기 위에서 부유 배양하는 SOP입니다. 각 단계를 진행하면 아래 설명이 자동으로 강조됩니다.</div>
+    <div id="manualSteps"></div>
+    <div id="summaryBox"></div>
+  </div>
+</div>
+<p class="note" style="text-align:center;">※ 학습용 시뮬레이터입니다. 실제 SOP·파라미터는 기관·제품마다 다를 수 있습니다.</p>
+
+<div class="devBox">
+  <h3>🚨 자주 등장하는 일탈(Deviation) 사례</h3>
+  <div class="devIntro">진탕 플라스크 배양 확장 공정에서 GMP/세포배양 실무 교육 자료에 자주 언급되는 일반적인 일탈 유형입니다.</div>
+  <div class="devList">
+    <div class="devCase"><div class="dtitle">파종 밀도 계산 오류<span class="badge major">중대</span></div><p>희석 계산 실수로 목표보다 지나치게 낮거나 높은 밀도로 파종하는 경우. 낮으면 배양 지연·회복 실패로, 높으면 조기 영양 고갈·과증식으로 이어져 배치 전체 스케줄에 영향을 줍니다.</p></div>
+    <div class="devCase"><div class="dtitle">첨가 순서 위반(세포 먼저 투입)<span class="badge minor">경미</span></div><p>배지 없이 농축된 세포현탁액을 플라스크에 먼저 투입하면 국소적으로 삼투압·pH가 급격히 변해 초기 세포 스트레스를 유발할 수 있습니다. 배지를 먼저 채운 뒤 세포를 첨가하는 순서가 권장됩니다.</p></div>
+    <div class="devCase"><div class="dtitle">마개(캡) 과도 밀폐<span class="badge major">중대</span></div><p>통기용 캡을 완전히 잠그면 가스 교환이 차단되어 CO2가 축적되고 배지 pH가 급격히 변할 수 있습니다. 반대로 완전히 개방하면 외부 오염원 유입 위험이 커집니다.</p></div>
+    <div class="devCase"><div class="dtitle">진탕 속도(RPM) 설정 오류<span class="badge major">중대</span></div><p>RPM이 너무 낮으면 산소·영양 전달이 불균일해지고, 너무 높으면 전단응력(shear stress)으로 세포가 손상됩니다. 기구·용기 크기에 맞는 표준 범위를 벗어난 설정이 반복적으로 보고되는 일탈 유형입니다.</p></div>
+    <div class="devCase"><div class="dtitle">오염 징후 조기 발견 실패<span class="badge major">중대</span></div><p>배지 색상(페놀레드 지시약) 변화나 탁도 같은 육안 오염 징후를 놓치고 배양을 계속 유지하는 경우. 발견이 늦어질수록 인접 배치·설비까지 오염이 확산될 위험이 커집니다.</p></div>
+    <div class="devCase"><div class="dtitle">계대 시점 지연 및 라벨 오기<span class="badge minor">경미</span></div><p>세포 밀도가 과도하게 높아진 상태로 방치해 대사노폐물이 축적되거나, 계대번호·날짜를 잘못 기재해 세포 이력 추적이 어려워지는 경우가 실무에서 반복적으로 보고됩니다.</p></div>
+  </div>
+</div>
+
+<div id="resultOverlay"><div id="resultCard">
+  <h2>결과</h2>
+  <div class="grade" id="gradeText">S</div>
+  <div id="gradeDesc"></div>
+  <ul id="issueList"></ul>
+  <button onclick="location.reload()">다시 하기</button>
+</div></div>
+
+<script>
+const MANUAL_STEPS = [
+  {title:"1. 파종 부피 계산", desc:"현재 세포 농도와 목표 파종 밀도·최종 부피를 바탕으로 필요한 세포현탁액 부피를 계산합니다. 계산이 틀리면 배양 전체 스케줄이 어긋납니다."},
+  {title:"2. 배지 → 세포 순서로 첨가", desc:"예열된 배지를 먼저 채운 뒤 세포현탁액을 첨가합니다. 순서가 바뀌면 국소적인 삼투압 스트레스가 발생할 수 있습니다."},
+  {title:"3. 통기용 캡 설정", desc:"살짝 개방된 상태로 캡을 조정해 가스 교환은 허용하되 오염원 유입은 막습니다. 완전 밀폐는 CO2 축적, 완전 개방은 오염 위험으로 이어집니다."},
+  {title:"4. 진탕기 RPM 설정", desc:"120~150rpm 부근이 이상적입니다. 너무 낮으면 산소·영양 전달이 불균일해지고, 너무 높으면 전단응력으로 세포가 손상됩니다."},
+  {title:"5. 일일 육안 관찰", desc:"매일 배지 색상(페놀레드)과 탁도를 확인해 오염 여부를 판단합니다. 오염 징후를 놓치면 인접 배치까지 확산될 수 있습니다."},
+  {title:"6. 계대 시점 판단", desc:"세포 밀도를 확인해 계대(다음 용기로 확장) 여부를 판단합니다. 과도하게 늦어지면 영양 고갈·대사노폐물 축적으로 세포 상태가 저하됩니다."},
+  {title:"7. 라벨 작성 및 인계", desc:"날짜·계대번호·이니셜을 정확히 기재해 다음 배양 단계(스피너 플라스크)로 인계합니다. 오기재는 세포 이력 추적을 어렵게 만듭니다."}
+];
+
+let currentStep = 1;
+let mistakes = 0;
+let issues = [];
+
+function renderManual(){
+  const wrap = document.getElementById('manualSteps');
+  wrap.innerHTML = '';
+  MANUAL_STEPS.forEach((s, i)=>{
+    const n = i+1;
+    const div = document.createElement('div');
+    div.className = 'mstep' + (n===currentStep ? ' current' : (n<currentStep ? ' done' : ' upcoming'));
+    const check = n<currentStep ? '✓ ' : '';
+    div.innerHTML = '<div class="mtitle"><span>'+check+s.title+'</span></div><div class="mdesc">'+s.desc+'</div>';
+    wrap.appendChild(div);
+  });
+  if(currentStep > MANUAL_STEPS.length){
+    const sb = document.getElementById('summaryBox');
+    sb.style.display = 'block';
+    sb.textContent = '모든 단계를 완료했습니다. 실수 ' + mistakes + '회 — 결과 화면을 확인하세요.';
+  }
+}
+renderManual();
+
+function addMistake(reason, weight){
+  mistakes += (weight||1);
+  issues.push(reason);
+  flashMsg('⚠ ' + reason, '#c94b3f');
+}
+function okMsg(text){ flashMsg(text, '#1c8a6b'); }
+
+let msgText;
+function flashMsg(text, color){
+  if(msgText){ msgText.setText(text); msgText.setColor(color); msgText.setAlpha(1);
+    scene.tweens.add({targets:msgText, alpha:0, delay:1600, duration:600}); }
+}
+
+function finalizeGame(){
+  document.getElementById('resultOverlay').style.display = 'flex';
+  let grade = 'S', desc = '계산·조작·판단 모두 정확했습니다.';
+  if(mistakes>=5){ grade='C'; desc='여러 실수가 누적되어 배양 품질을 신뢰하기 어렵습니다.'; }
+  else if(mistakes>=1){ grade='B'; desc='진행은 가능하나 몇 가지 개선이 필요합니다.'; }
+  document.getElementById('gradeText').textContent = grade;
+  document.getElementById('gradeDesc').textContent = desc + ' (실수 ' + mistakes + '회)';
+  const ul = document.getElementById('issueList');
+  ul.innerHTML = '';
+  if(issues.length===0){
+    const li = document.createElement('li'); li.textContent = '발생한 품질 이슈 없음'; ul.appendChild(li);
+  } else {
+    issues.forEach(i=>{ const li=document.createElement('li'); li.textContent=i; ul.appendChild(li); });
+  }
+}
+
+let scene;
+const config = {
+  type: Phaser.AUTO,
+  width: 900,
+  height: 650,
+  backgroundColor: '#12182a',
+  parent: 'gameCanvas',
+  dom: { createContainer: true },
+  scene: { create: create, update: update }
+};
+new Phaser.Game(config);
+
+// ---- helpers: every add.* call is auto-tracked so clearStep() never leaks objects ----
+function T(x,y,txt,style){ const o = scene.add.text(x,y,txt,style); scene.stepObjects.push(o); return o; }
+function Rect(x,y,w,h,color,alpha){ const o = scene.add.rectangle(x,y,w,h,color,alpha); scene.stepObjects.push(o); return o; }
+function Circ(x,y,r,color,alpha){ const o = scene.add.circle(x,y,r,color,alpha); scene.stepObjects.push(o); return o; }
+function makeBtn(x,y,w,h,label,onClick){
+  const g = Rect(x,y,w,h,0x1c8a6b).setInteractive({useHandCursor:true});
+  const t = T(x,y,label,{fontSize:'14px', color:'#fff'}).setOrigin(0.5);
+  g.on('pointerdown', onClick);
+  return g;
+}
+function makeHtmlInput(x,y,placeholder){
+  const el = document.createElement('input');
+  el.type = 'text'; el.className='gameInput'; el.placeholder = placeholder||'';
+  const dom = scene.add.dom(x,y,el);
+  scene.stepObjects.push(dom);
+  return el;
+}
+
+let currentConc, targetDensity, finalVolume, neededVol;
+
+function create(){
+  scene = this;
+  scene.stepObjects = [];
+  scene.add.rectangle(450,30,900,60,0x0b1524).setOrigin(0.5,0.5);
+  scene.add.text(20,12,'진탕 플라스크 배양 시뮬레이터', {fontSize:'20px', color:'#e8ecf4', fontStyle:'bold'});
+  scene.stepLabel = scene.add.text(700,16,'STEP 1 / 7', {fontSize:'16px', color:'#9ad6c9'});
+  msgText = scene.add.text(20,610, '', {fontSize:'14px', color:'#1c8a6b'});
+  setupStep1.call(scene);
+}
+
+function clearStep(){
+  scene.stepObjects.forEach(o=>{ if(o && o.destroy) o.destroy(); });
+  scene.stepObjects = [];
+}
+
+function goToStep(n){
+  clearStep();
+  currentStep = n;
+  scene.stepLabel.setText('STEP ' + Math.min(n,7) + ' / 7');
+  renderManual();
+  if(n===1) setupStep1.call(scene);
+  else if(n===2) setupStep2.call(scene);
+  else if(n===3) setupStep3.call(scene);
+  else if(n===4) setupStep4.call(scene);
+  else if(n===5) setupStep5.call(scene);
+  else if(n===6) setupStep6.call(scene);
+  else if(n===7) setupStep7.call(scene);
+  else finalizeGame();
+}
+
+// ---------- STEP 1: seeding volume calculation ----------
+function setupStep1(){
+  currentConc = (1.5 + Math.random()*2).toFixed(1)*1; // 1.5~3.5 x10^6 cells/mL
+  targetDensity = 0.3; // 3x10^5 cells/mL target
+  finalVolume = 100; // mL
+  neededVol = (targetDensity * finalVolume / currentConc); // mL of stock suspension
+  T(20,90,'① 아래 정보를 바탕으로 필요한 세포현탁액 부피(mL)를 계산해 입력하세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  T(60,150,'현재 세포 농도: ' + currentConc + ' × 10⁶ cells/mL', {fontSize:'16px', color:'#ccd3e0'});
+  T(60,185,'목표 파종 밀도: 3 × 10⁵ cells/mL', {fontSize:'16px', color:'#ccd3e0'});
+  T(60,220,'최종 배양 부피: 100 mL', {fontSize:'16px', color:'#ccd3e0'});
+  T(60,280,'필요 세포현탁액 부피 (mL) =', {fontSize:'15px', color:'#9ad6c9'});
+  const input = makeHtmlInput(360,280,'예: 20.0');
+  makeBtn(60,340,220,50,'계산값 확인', ()=>{
+    const v = parseFloat(input.value);
+    if(isNaN(v)){ addMistake('부피 미입력 상태로 확인 시도', 1); return; }
+    const diff = Math.abs(v - neededVol);
+    if(diff <= 0.5){
+      okMsg('계산이 정확합니다 (' + neededVol.toFixed(1) + 'mL).');
+      goToStep(2);
+    } else {
+      addMistake('파종 부피 계산 오류 — 입력값 ' + v + 'mL (정답 약 ' + neededVol.toFixed(1) + 'mL)', 1);
+      goToStep(2);
+    }
+  });
+}
+
+// ---------- STEP 2: medium then cells, drag order ----------
+let mediumAdded=false, cellsAdded=false;
+function setupStep2(){
+  mediumAdded=false; cellsAdded=false;
+  T(20,90,'② 새 플라스크에 "예열 배지"를 먼저 넣고, 그 다음 "세포현탁액"을 넣으세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const flask = Rect(650,340,180,160,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+  T(650,240,'새 진탕 플라스크',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+
+  const mediumBottle = Rect(220,300,110,70,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+  const mediumLbl = T(220,300,'예열 배지',{fontSize:'12px', color:'#ccd3e0'}).setOrigin(0.5);
+  const cellTube = Rect(220,420,110,70,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+  const cellLbl = T(220,420,'세포현탁액',{fontSize:'12px', color:'#ccd3e0'}).setOrigin(0.5);
+
+  scene.input.setDraggable(mediumBottle);
+  scene.input.setDraggable(cellTube);
+  const flaskZone = new Phaser.Geom.Rectangle(560,260,180,160);
+
+  const origMX=220, origMY=300, origCX=220, origCY=420;
+  mediumBottle.on('drag',(p,dx,dy)=>{ mediumBottle.x=dx; mediumBottle.y=dy; mediumLbl.x=dx; mediumLbl.y=dy; });
+  mediumBottle.on('dragend', ()=>{
+    if(Phaser.Geom.Rectangle.Contains(flaskZone, mediumBottle.x, mediumBottle.y)){
+      mediumAdded = true;
+      okMsg('배지를 채웠습니다.');
+      mediumBottle.disableInteractive();
+      mediumBottle.setFillStyle(0x555f77);
+    } else {
+      mediumBottle.x=origMX; mediumBottle.y=origMY; mediumLbl.x=origMX; mediumLbl.y=origMY;
+    }
+  });
+  cellTube.on('drag',(p,dx,dy)=>{ cellTube.x=dx; cellTube.y=dy; cellLbl.x=dx; cellLbl.y=dy; });
+  cellTube.on('dragend', ()=>{
+    if(Phaser.Geom.Rectangle.Contains(flaskZone, cellTube.x, cellTube.y)){
+      if(!mediumAdded){
+        addMistake('첨가 순서 위반 — 배지 없이 세포현탁액을 먼저 투입', 1);
+      } else {
+        okMsg('세포현탁액을 첨가했습니다.');
+      }
+      cellsAdded = true;
+      cellTube.disableInteractive();
+      cellTube.setFillStyle(0x555f77);
+      goToStep(3);
+    } else {
+      cellTube.x=origCX; cellTube.y=origCY; cellLbl.x=origCX; cellLbl.y=origCY;
+    }
+  });
+}
+
+// ---------- STEP 3: vent cap setting ----------
+function setupStep3(){
+  T(20,90,'③ 통기용 캡을 알맞게 설정하세요 — 살짝 개방 상태가 이상적입니다.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  Rect(450,300,180,160,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+  T(450,220,'진탕 플라스크 캡',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  makeBtn(220,420,180,54,'완전 밀폐', ()=>{
+    addMistake('마개 과도 밀폐 — CO2 축적 및 pH 급변 위험', 1);
+    goToStep(4);
+  });
+  makeBtn(450,420,180,54,'살짝 개방', ()=>{
+    okMsg('가스 교환이 적절히 허용됩니다.');
+    goToStep(4);
+  });
+  makeBtn(680,420,180,54,'완전 개방', ()=>{
+    addMistake('마개 과도 개방 — 외부 오염원 유입 위험', 1);
+    goToStep(4);
+  });
+}
+
+// ---------- STEP 4: shaker RPM ----------
+function setupStep4(){
+  T(20,90,'④ 진탕기 RPM을 입력하세요 (일반적으로 120~150rpm이 이상적입니다).', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  T(60,180,'RPM 설정 =', {fontSize:'16px', color:'#9ad6c9'});
+  const input = makeHtmlInput(220,180,'예: 135');
+  makeBtn(60,260,220,50,'설정 확인', ()=>{
+    const v = parseFloat(input.value);
+    if(isNaN(v) || v<40 || v>260){
+      addMistake('RPM 미입력 또는 비현실적 값 — 재입력 필요', 1);
+      return;
+    }
+    if(v<80 || v>200){
+      addMistake('RPM 표준 범위 크게 이탈 — 산소전달 불량 또는 심각한 전단응력 위험 (' + v + 'rpm)', 1);
+    } else if(v<120 || v>150){
+      addMistake('RPM 이상 범위 이탈 — 혼합 불균일 또는 전단응력 우려 (' + v + 'rpm)', 1);
+    } else {
+      okMsg('적절한 RPM으로 설정했습니다 (' + v + 'rpm).');
+    }
+    goToStep(5);
+  });
+}
+
+// ---------- STEP 5: daily observation ----------
+let obsDay=0;
+const OBS_SCHEDULE = [
+  {label:'Day 1', contaminated:false},
+  {label:'Day 2', contaminated:false},
+  {label:'Day 3', contaminated:true}
+];
+function setupStep5(){
+  obsDay = 0;
+  renderObsDay();
+}
+function renderObsDay(){
+  clearStep();
+  T(20,90,'⑤ 매일 배지 색상·탁도를 관찰하고 오염 여부를 판단하세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const day = OBS_SCHEDULE[obsDay];
+  const color = day.contaminated ? 0xb08a2a : 0xc9526a;
+  Circ(450,280,90,color, day.contaminated?0.5:0.85);
+  T(450,280, day.label + (day.contaminated ? '\n(탁도 있음·색 변화)' : '\n(정상 배지색)'), {fontSize:'15px', color:'#e8ecf4', align:'center'}).setOrigin(0.5);
+  makeBtn(280,420,220,54,'정상 — 계속 배양', ()=>{
+    if(day.contaminated){
+      addMistake('오염 징후 조기 발견 실패 — 오염된 배양을 계속 유지', 1);
+    } else {
+      okMsg('정상 판단입니다.');
+    }
+    advanceObs();
+  });
+  makeBtn(560,420,220,54,'폐기 및 재제작 필요', ()=>{
+    if(day.contaminated){
+      okMsg('올바른 판단입니다 — 오염 배치를 폐기합니다.');
+    } else {
+      addMistake('불필요한 폐기 판단 — 정상 배양을 오염으로 오판', 1);
+    }
+    advanceObs();
+  });
+}
+function advanceObs(){
+  obsDay++;
+  if(obsDay >= OBS_SCHEDULE.length){ goToStep(6); }
+  else { renderObsDay(); }
+}
+
+// ---------- STEP 6: passage timing decision ----------
+let currentDensityM=0;
+function setupStep6(){
+  currentDensityM = (0.4 + Math.random()*1.8); // x10^6 cells/mL
+  T(20,90,'⑥ 세포 계수기로 확인한 현재 밀도를 보고 계대 여부를 판단하세요 (이상적 계대 시점: 약 1.0~1.5 × 10⁶ cells/mL).', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  T(60,180,'현재 밀도: ' + currentDensityM.toFixed(2) + ' × 10⁶ cells/mL', {fontSize:'18px', color:'#e8ecf4'});
+  const ideal = currentDensityM>=1.0 && currentDensityM<=1.5;
+  makeBtn(280,320,220,54,'지금 계대 진행', ()=>{
+    if(ideal || currentDensityM>1.5){ okMsg('적절한 시점의 계대 진행입니다.'); }
+    else{ addMistake('계대 조기 진행 — 아직 밀도가 낮아 배양 효율 저하 우려', 1); }
+    goToStep(7);
+  });
+  makeBtn(560,320,220,54,'며칠 더 배양(보류)', ()=>{
+    if(currentDensityM<1.0){ okMsg('올바른 판단 — 조금 더 배양이 필요합니다.'); }
+    else{ addMistake('계대 시점 지연 — 밀도 과다로 대사노폐물 축적 위험', 1); }
+    goToStep(7);
+  });
+}
+
+// ---------- STEP 7: labeling & handoff ----------
+function setupStep7(){
+  T(20,90,'⑦ 라벨(날짜·계대번호·이니셜)을 작성해 다음 단계로 인계하세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const label = Rect(450,280,260,120,0x394159).setStrokeStyle(1,0x6a7690);
+  T(450,280,'라벨\n(날짜 · 계대번호 · 이니셜)',{fontSize:'13px', color:'#ccd3e0', align:'center'}).setOrigin(0.5);
+  makeBtn(450,440,260,54,'라벨 작성 완료 → 종료', ()=>{
+    okMsg('라벨 작성 완료 — 스피너 플라스크 단계로 인계합니다.');
+    goToStep(8);
+  });
+}
+
+function update(time, delta){}
+</script>
+</body>
+</html>

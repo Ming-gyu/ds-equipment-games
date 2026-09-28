@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>정밀저울(Analytical Balance) 시뮬레이터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0a0e16; color:#e8e8ea; font-family:'Segoe UI', 'Malgun Gothic', sans-serif; }
+  #app { display:flex; flex-direction:row; align-items:flex-start; justify-content:center; gap:0; margin-top:10px; }
+  #gameWrap { width:900px; height:640px; background:#0e1420; border:1px solid #23304a; position:relative; }
+  #manualPanel { width:300px; height:640px; background:#f7f5ef; color:#2a2a2a; overflow-y:auto; border:1px solid #d8d3c2; border-left:none; padding:14px 14px 20px; font-size:13px; line-height:1.5; }
+  #manualPanel h3 { margin:0 0 4px; font-size:16px; }
+  #manualPanel .intro { color:#5a5646; font-size:12.5px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #cfc9b6; }
+  .manualStep { margin-bottom:10px; padding:8px 10px; border-radius:8px; border:1px solid transparent; }
+  .manualStep .mTitle { font-weight:600; font-size:13px; }
+  .manualStep .mDesc { font-size:12.5px; color:#4a4636; margin-top:4px; display:none; }
+  .manualStep.current { background:#e9f5ec; border-color:#4caf7d; }
+  .manualStep.current .mDesc { display:block; }
+  .manualStep.done { opacity:0.55; }
+  .manualStep.done .mTitle::before { content:"✓ "; color:#4caf7d; }
+  .manualSummary { margin-top:14px; padding:10px; background:#e9f5ec; border:1px solid #4caf7d; border-radius:8px; font-size:12.5px; display:none; }
+  .note { width:900px; margin: 8px auto 0; color:#9aa4b8; font-size:12.5px; }
+  .devBox { width:900px; margin: 10px auto 30px; border:1px solid #7a3330; background:#2a1416; border-radius:10px; padding:14px 16px; }
+  .devBox h4 { margin:0 0 4px; color:#ff9d8a; font-size:14px; }
+  .devBox .devIntro { color:#d8b3ac; font-size:12px; margin-bottom:10px; }
+  .devList { max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+  .devCase { background:#341a1c; border:1px solid #5c2a2a; border-radius:8px; padding:8px 10px; }
+  .devCase .devTitle { font-weight:600; font-size:13px; color:#ffd7ce; display:flex; align-items:center; gap:6px; }
+  .badge { font-size:10.5px; padding:1px 6px; border-radius:10px; font-weight:600; }
+  .badge.major { background:#a13a2b; color:#fff; }
+  .badge.minor { background:#8a6a2b; color:#fff; }
+  .devDesc { font-size:12px; color:#e0c3bc; margin-top:3px; }
+  .gameInput { width:110px; font-size:15px; padding:4px 6px; border-radius:6px; border:1px solid #4a5d80; background:#1b2740; color:#fff; text-align:center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gameWrap"></div>
+  <div id="manualPanel">
+    <h3 id="mpTitle"></h3>
+    <div class="intro" id="mpIntro"></div>
+    <div id="manualSteps"></div>
+    <div class="manualSummary" id="manualSummary">모든 단계를 완료했습니다. 우측 결과 화면에서 최종 등급을 확인하세요.</div>
+  </div>
+</div>
+<p class="note">⚠️ 이 게임은 인터넷 연결이 필요합니다(Phaser.js를 cdnjs에서 불러옵니다). 이 환경에서는 실제 브라우저 렌더링 검증을 하지 못했으니, 직접 플레이해보고 이상하면 알려주세요.</p>
+<div class="devBox">
+  <h4>🚨 자주 등장하는 일탈(Deviation) 사례</h4>
+  <div class="devIntro">GMP/QC 실무에서 반복적으로 언급되는 일반적인 일탈 유형입니다(특정 사건 지목 아님).</div>
+  <div class="devList" id="devList"></div>
+</div>
+
+<script>
+const CONFIG = {
+  "title": "정밀저울(Analytical Balance) 시뮬레이터",
+  "manualEmoji": "⚖️",
+  "manualIntro": "시약과 배지 성분을 정확한 질량으로 계량하는 핵심 장비입니다. 수평·영점 상태와 일일 점검이 측정 신뢰도를 결정합니다.",
+  "manualSteps": [
+    {
+      "title": "1. 수평 확인",
+      "desc": "저울 뒷면의 수평계(기포)를 확인해 다리를 조정, 기포가 중앙에 오도록 맞춰야 합니다."
+    },
+    {
+      "title": "2. 영점(타레) 조정",
+      "desc": "계량 용기를 올린 뒤 반드시 타레 버튼을 눌러 용기 무게를 제외해야 합니다."
+    },
+    {
+      "title": "3. 시약 무게 계산",
+      "desc": "목표 농도와 부피에 맞는 시약의 필요 질량을 계산합니다."
+    },
+    {
+      "title": "4. 계량값 확인",
+      "desc": "실제 계량값은 목표값(4.5g) 대비 허용오차(±0.2g) 이내여야 합니다."
+    },
+    {
+      "title": "5. 체크웨이트(일일점검) 판정",
+      "desc": "표준 분동을 이용한 점검 오차가 허용오차(0.1%) 이내여야 저울을 사용할 수 있습니다."
+    },
+    {
+      "title": "6. 계량 기록 작성",
+      "desc": "계량한 시약명, 목표/실측 질량, 점검 결과를 기록합니다."
+    }
+  ],
+  "deviationCases": [
+    {
+      "title": "수평 미조정 상태로 사용",
+      "severity": "minor",
+      "desc": "저울이 수평 상태가 아니면 측정값에 체계적 오차가 발생할 수 있습니다."
+    },
+    {
+      "title": "영점 조정 없이 측정",
+      "severity": "major",
+      "desc": "용기를 올린 뒤 영점(타레)을 잡지 않고 측정하면 용기 무게가 포함되어 계산이 틀어집니다."
+    },
+    {
+      "title": "계량값 허용오차 이탈 무시",
+      "severity": "minor",
+      "desc": "계량값이 허용오차를 벗어났는데도 그대로 사용하면 후속 공정 농도가 부정확해집니다."
+    },
+    {
+      "title": "체크웨이트(일일점검) 결과 이상 무시",
+      "severity": "major",
+      "desc": "표준 분동 값이 허용 오차를 벗어났는데도 그대로 사용하는 경우입니다."
+    },
+    {
+      "title": "흡습성 시약 장시간 노출",
+      "severity": "minor",
+      "desc": "흡습성 시약을 열린 상태로 오래 계량하면 수분 흡수로 질량이 계속 변해 오차가 발생합니다."
+    },
+    {
+      "title": "계량 기록 누락",
+      "severity": "minor",
+      "desc": "계량 결과와 점검 결과를 기록하지 않으면 추적성이 훼손됩니다."
+    }
+  ],
+  "steps": [
+    {
+      "type": "dragLever",
+      "manualTitleShort": "수평 확인",
+      "prompt": "레버를 드래그해 저울 다리를 조정하세요.",
+      "positions": [
+        {
+          "label": "기울어짐",
+          "correct": false,
+          "msgIfWrong": "수평 미조정 상태로 사용"
+        },
+        {
+          "label": "수평 (기포 중앙)",
+          "correct": true
+        }
+      ],
+      "startIndex": 0,
+      "okMsg": "수평이 정상적으로 맞춰졌습니다."
+    },
+    {
+      "type": "dragToZone",
+      "manualTitleShort": "영점 조정",
+      "prompt": "계량지를 저울 위판으로 드래그한 뒤, 타레 버튼을 누르세요.",
+      "mode": "mapping",
+      "items": [
+        {
+          "id": "paper",
+          "label": "계량지"
+        }
+      ],
+      "zones": [
+        {
+          "id": "pan",
+          "label": "저울 위판",
+          "x": 450,
+          "y": 260
+        }
+      ],
+      "correct": {
+        "paper": "pan"
+      },
+      "wrongMsgPrefix": "영점 조정 절차 오류",
+      "okMsg": "계량지를 올바르게 올렸습니다. 다음 단계에서 타레를 확인합니다."
+    },
+    {
+      "type": "calc",
+      "manualTitleShort": "시약 무게 계산",
+      "prompt": "0.9% NaCl 용액 500mL를 만들려 합니다. 필요한 NaCl 질량(g)은?",
+      "givenLines": [
+        "목표 농도: 0.9% (w/v)",
+        "목표 부피: 500 mL"
+      ],
+      "calcLabel": "필요 NaCl 질량",
+      "placeholder": "예: 4.5",
+      "target": 4.5,
+      "tolerance": 0.2,
+      "unit": "g",
+      "wrongMsgPrefix": "시약 무게 계산 오류"
+    },
+    {
+      "type": "dragKnob",
+      "manualTitleShort": "계량값 확인",
+      "prompt": "다이얼을 드래그해 실제 계량된 질량을 맞추세요.",
+      "label": "계량값",
+      "unit": "g",
+      "min": 3.5,
+      "max": 5.5,
+      "hardMin": 4.0,
+      "hardMax": 5.0,
+      "idealMin": 4.3,
+      "idealMax": 4.7,
+      "decimals": 2,
+      "hardMsg": "계량값 허용오차 크게 이탈 — 재계량 필요",
+      "idealMsg": "계량값 허용오차 이탈",
+      "okMsg": "계량값이 허용오차 이내입니다."
+    },
+    {
+      "type": "decision",
+      "manualTitleShort": "체크웨이트 판정",
+      "prompt": "측정기로 점검 오차를 확인하고 판단하세요.",
+      "probeDrag": true,
+      "measureLabel": "점검 오차",
+      "min": 0.0,
+      "max": 0.5,
+      "decimals": 2,
+      "unit": "%",
+      "threshold": 0.1,
+      "aboveIsGood": false,
+      "actionGood": {
+        "label": "정상 — 사용 승인"
+      },
+      "actionBad": {
+        "label": "이상 — 사용 중지"
+      },
+      "mistakeIfWrongGood": "체크웨이트 결과 이상 무시",
+      "mistakeIfWrongBad": "정상인데 불필요하게 사용 중지",
+      "okGoodMsg": "사용 승인 판단이 맞습니다.",
+      "okBadMsg": "사용 중지 판단이 맞습니다."
+    },
+    {
+      "type": "info",
+      "manualTitleShort": "계량 기록 작성",
+      "prompt": "계량 결과와 일일 점검 결과를 기록지에 작성했습니다.",
+      "msg": "정밀저울 사용 절차를 완료했습니다."
+    }
+  ]
+};
+
+document.getElementById('mpTitle').textContent = (CONFIG.manualEmoji||'') + ' ' + CONFIG.title;
+document.getElementById('mpIntro').textContent = CONFIG.manualIntro;
+const devListEl = document.getElementById('devList');
+CONFIG.deviationCases.forEach(dc=>{
+  const div = document.createElement('div');
+  div.className = 'devCase';
+  div.innerHTML = '<div class="devTitle">'+dc.title+' <span class="badge '+dc.severity+'">'+(dc.severity==='major'?'중대':'경미')+'</span></div><div class="devDesc">'+dc.desc+'</div>';
+  devListEl.appendChild(div);
+});
+
+const MANUAL_STEPS = CONFIG.manualSteps;
+let curStep = 0;
+let doneSteps = [];
+function renderManual(){
+  const wrap = document.getElementById('manualSteps');
+  wrap.innerHTML = '';
+  MANUAL_STEPS.forEach((s,i)=>{
+    const div = document.createElement('div');
+    div.className = 'manualStep' + (i===curStep?' current':'') + (doneSteps.includes(i)?' done':'');
+    div.innerHTML = '<div class="mTitle">'+s.title+'</div><div class="mDesc">'+s.desc+'</div>';
+    wrap.appendChild(div);
+  });
+  if(doneSteps.length === MANUAL_STEPS.length){
+    document.getElementById('manualSummary').style.display = 'block';
+  }
+}
+renderManual();
+
+let scene;
+let mistakes = 0;
+let mistakeLog = [];
+function addMistake(msg, weight){ mistakes += (weight||1); mistakeLog.push(msg); }
+
+// ---- generic helpers (auto-tracked) ----
+function T(x,y,txt,style){ const o = scene.add.text(x,y,txt,style); scene.stepObjects.push(o); return o; }
+function Rect(x,y,w,h,color,alpha){ const o = scene.add.rectangle(x,y,w,h,color,alpha); scene.stepObjects.push(o); return o; }
+function Circ(x,y,r,color,alpha){ const o = scene.add.circle(x,y,r,color,alpha); scene.stepObjects.push(o); return o; }
+function Line(x1,y1,x2,y2,color,width){ const g = scene.add.graphics(); g.lineStyle(width||2,color,1); g.lineBetween(x1,y1,x2,y2); scene.stepObjects.push(g); return g; }
+function clearMsgs(){ scene.stepObjects.forEach(o=>{ if(o._isMsg) o.destroy(); }); }
+function msg(txt, color){ const m = T(450, 590, txt, {fontSize:'13px', color: color||'#ff8a7a', wordWrap:{width:820}, align:'center'}).setOrigin(0.5,0); m._isMsg = true; return m; }
+function makeBtn(x,y,w,h,label,onClick,color){
+  const g = Rect(x,y,w,h,color||0x1c8a6b).setInteractive({useHandCursor:true});
+  const t = T(x,y,label,{fontSize:'14px', color:'#ffffff'}).setOrigin(0.5);
+  g.on('pointerdown', onClick);
+  return {bg:g, label:t};
+}
+function makeHtmlInput(x,y,placeholder){
+  const el = document.createElement('input');
+  el.type = 'text'; el.className='gameInput'; el.placeholder = placeholder||'';
+  const dom = scene.add.dom(x,y,el);
+  scene.stepObjects.push(dom);
+  return el;
+}
+function makeDraggable(obj, onDragStart, onDrag, onDragEnd){
+  obj.setInteractive({ draggable:true, useHandCursor:true });
+  scene.input.setDraggable(obj);
+  if(onDragStart) obj.on('dragstart', onDragStart);
+  obj.on('drag', (pointer, dragX, dragY)=>{
+    obj.x = dragX; obj.y = dragY;
+    if(obj._label) obj._label.setPosition(dragX, dragY);
+    if(onDrag) onDrag(obj, dragX, dragY);
+  });
+  obj.on('dragend', ()=>{ if(onDragEnd) onDragEnd(obj); });
+  return obj;
+}
+function dist(x1,y1,x2,y2){ return Math.hypot(x1-x2, y1-y2); }
+const PALETTE = [0x3a6ea8, 0x8a6a2b, 0x4a8a5c, 0xa15a4a, 0x6a5aa1, 0x2b8a8a];
+function colorFor(i, def){ return (def && def.color) ? def.color : PALETTE[i % PALETTE.length]; }
+
+function layoutRow(n, startX, endX, y){
+  const positions = [];
+  if(n === 1){ positions.push((startX+endX)/2); return positions.map(x=>({x,y})); }
+  const gap = (endX-startX)/(n-1);
+  for(let i=0;i<n;i++) positions.push(startX + gap*i);
+  return positions.map(x=>({x,y}));
+}
+
+function goToStep(i){
+  scene.stepObjects.forEach(o=>{ if(o && o.destroy) o.destroy(); });
+  scene.stepObjects = [];
+  if(curStep < i){ if(!doneSteps.includes(curStep)) doneSteps.push(curStep); }
+  curStep = i;
+  renderManual();
+  const steps = CONFIG.steps;
+  if(i >= steps.length){ showResult(); return; }
+  T(450, 20, (i+1)+'. '+(steps[i].manualTitleShort||MANUAL_STEPS[i].title), {fontSize:'19px', color:'#ffffff', fontStyle:'bold'}).setOrigin(0.5,0);
+  T(450, 46, steps[i].prompt, {fontSize:'13px', color:'#9fb0c9', wordWrap:{width:820}, align:'center'}).setOrigin(0.5,0);
+  const renderer = STEP_RENDERERS[steps[i].type];
+  renderer(steps[i]);
+}
+function nextStepBtn(label){ return makeBtn(770, 600, 170, 40, label||'다음 단계 →', ()=>goToStep(curStep+1)); }
+
+function showResult(){
+  scene.stepObjects.forEach(o=>{ if(o && o.destroy) o.destroy(); });
+  scene.stepObjects = [];
+  let grade = 'S';
+  if(mistakes >= 5) grade = 'C';
+  else if(mistakes >= 1) grade = 'B';
+  T(450, 60, '🏁 SOP 완료', {fontSize:'24px', color:'#ffffff', fontStyle:'bold'}).setOrigin(0.5);
+  T(450, 110, '총 실수: '+mistakes+'회   최종 등급: '+grade, {fontSize:'20px', color: grade==='S'?'#7be495':(grade==='B'?'#ffe08a':'#ff8a7a')}).setOrigin(0.5);
+  const issuesText = mistakeLog.length ? mistakeLog.map((m,i)=>(i+1)+'. '+m).join('\n') : '발생한 품질 이슈 없음';
+  T(450, 160, '품질 이슈 목록:\n'+issuesText, {fontSize:'13px', color:'#c9d2e0', wordWrap:{width:760}, align:'left'}).setOrigin(0.5,0);
+  doneSteps = MANUAL_STEPS.map((_,i)=>i);
+  renderManual();
+}
+
+// ================= STEP RENDERERS =================
+const STEP_RENDERERS = {};
+
+// ---- dragToZone: items dragged to distinct zones (mapping) OR one zone in required order (sequence) ----
+STEP_RENDERERS.dragToZone = function(def){
+  const mode = def.mode || 'mapping';
+  const trayY = def.trayY || 540;
+  const positions = layoutRow(def.items.length, 230, 670, trayY);
+  scene.zoneFill = {};
+  (def.zones||[]).forEach(z=>{
+    Circ(z.x, z.y, def.zoneRadius||50, 0x14304a, 1).setStrokeStyle(2, 0x4a7db0);
+    T(z.x, z.y - (def.zoneRadius||50) - 18, z.label, {fontSize:'12px', color:'#9fb0c9'}).setOrigin(0.5);
+    scene.zoneFill[z.id] = null;
+  });
+  let seqIndex = 0;
+  def.items.forEach((it,idx)=>{
+    const home = positions[idx];
+    const obj = Circ(home.x, home.y, def.itemRadius||26, colorFor(idx, it), 1).setStrokeStyle(2, 0xffffff);
+    const lbl = T(home.x, home.y, it.label, {fontSize:'11px', color:'#fff', align:'center', wordWrap:{width:60}}).setOrigin(0.5);
+    obj._label = lbl; obj._id = it.id; obj._home = home; obj._placed = false;
+    makeDraggable(obj, null, null, (o)=>{
+      let target = null;
+      for(const z of (def.zones||[])){
+        if((mode==='mapping' ? !scene.zoneFill[z.id] : true) && dist(o.x,o.y,z.x,z.y) < (def.dropRadius||60)){ target = z; break; }
+      }
+      if(!target){ o.x=o._home.x; o.y=o._home.y; o._label.setPosition(o.x,o.y); return; }
+      if(mode === 'mapping'){
+        const correctZone = def.correct[o._id];
+        if(correctZone === target.id){
+          o.x = target.x; o.y = target.y; o._label.setPosition(o.x,o.y);
+          scene.zoneFill[target.id] = o._id; o._placed = true; o.disableInteractive();
+          checkMappingDone();
+        } else {
+          addMistake((def.wrongMsgPrefix||'배치 오류')+' — '+it.label+'을(를) 잘못된 위치에 배치 시도');
+          clearMsgs(); msg('⚠️ 잘못된 위치입니다. 다시 시도하세요.', '#ff8a7a');
+          o.x=o._home.x; o.y=o._home.y; o._label.setPosition(o.x,o.y);
+        }
+      } else { // sequence
+        const correctId = def.correctOrder[seqIndex];
+        if(o._id === correctId){
+          o.x = target.x; o.y = target.y; o._label.setPosition(o.x,o.y);
+          o.disableInteractive(); o._placed = true;
+          seqIndex++;
+          if(seqIndex >= def.correctOrder.length){
+            clearMsgs(); msg('✅ '+(def.okMsg||'순서를 정확히 지켰습니다.'), '#7be495');
+            nextStepBtn();
+          }
+        } else {
+          addMistake(def.wrongOrderMsg||'순서 위반');
+          clearMsgs(); msg('⚠️ 순서가 올바르지 않습니다. 다시 시도하세요.', '#ff8a7a');
+          o.x=o._home.x; o.y=o._home.y; o._label.setPosition(o.x,o.y);
+        }
+      }
+    });
+  });
+  function checkMappingDone(){
+    const allDone = def.items.every(it=>{
+      const found = Object.keys(scene.zoneFill).find(zid=>scene.zoneFill[zid]===it.id);
+      return !!found;
+    });
+    if(allDone){ clearMsgs(); msg('✅ '+(def.okMsg||'정확하게 배치했습니다.'), '#7be495'); nextStepBtn(); }
+  }
+};
+
+// ---- dragKnob: rotary dial for a continuous range value ----
+STEP_RENDERERS.dragKnob = function(def){
+  const cx=450, cy=270, r=140;
+  const startAngle = Math.PI*0.75, endAngle = Math.PI*2.25;
+  const sweep = endAngle-startAngle;
+  Circ(cx,cy,r,0x1b2740,1).setStrokeStyle(3,0x3a4d70);
+  const g = scene.add.graphics(); g.lineStyle(6,0x2a3a5c,1); g.beginPath(); g.arc(cx,cy,r-10,startAngle,endAngle,false); g.strokePath(); scene.stepObjects.push(g);
+  const idealStartFrac = (def.idealMin-def.min)/(def.max-def.min);
+  const idealEndFrac = (def.idealMax-def.min)/(def.max-def.min);
+  const g2 = scene.add.graphics(); g2.lineStyle(6,0x2f7d52,1); g2.beginPath(); g2.arc(cx,cy,r-10, startAngle+sweep*idealStartFrac, startAngle+sweep*idealEndFrac, false); g2.strokePath(); scene.stepObjects.push(g2);
+
+  let val = def.startValue!==undefined ? def.startValue : def.min;
+  const dec = def.decimals || 0;
+  const fmt = (v)=> dec>0 ? v.toFixed(dec) : Math.round(v);
+  const valText = T(cx, cy-30, fmt(val)+(def.unit||''), {fontSize:'22px', color:'#ffffff', fontStyle:'bold'}).setOrigin(0.5);
+  T(cx, cy+10, def.label, {fontSize:'13px', color:'#9fb0c9'}).setOrigin(0.5);
+  T(cx, cy+30, '목표: '+def.idealMin+'~'+def.idealMax+(def.unit||''), {fontSize:'12px', color:'#7f8fa8'}).setOrigin(0.5);
+
+  function angleToVal(angle){
+    let a = angle; while(a<startAngle) a+=Math.PI*2;
+    let frac = (a-startAngle)/sweep; frac = Math.max(0,Math.min(1,frac));
+    return def.min + frac*(def.max-def.min);
+  }
+  function valToPos(v){ const frac=(v-def.min)/(def.max-def.min); const a=startAngle+sweep*frac; return {x:cx+Math.cos(a)*(r-10), y:cy+Math.sin(a)*(r-10)}; }
+  const kp = valToPos(val);
+  const knob = Circ(kp.x, kp.y, 16, 0xffb648, 1).setStrokeStyle(2,0xffffff);
+  makeDraggable(knob, null, (o,x,y)=>{
+    const angle = Math.atan2(y-cy, x-cx);
+    val = angleToVal(angle);
+    const pos = valToPos(val);
+    o.x = pos.x; o.y = pos.y;
+    valText.setText(fmt(val)+(def.unit||''));
+  }, null);
+
+  makeBtn(450, 470, 180, 42, def.confirmLabel||'확정', ()=>{
+    clearMsgs();
+    if(val < def.hardMin || val > def.hardMax){
+      addMistake(def.hardMsg||'설정값이 허용 범위를 크게 벗어남');
+      msg('⚠️ 허용 범위를 크게 벗어났습니다. 재조정하세요.', '#ff8a7a');
+      return;
+    }
+    if(val < def.idealMin || val > def.idealMax){
+      addMistake(def.idealMsg||'설정값이 권장 범위를 벗어남');
+      msg('⚠️ 진행은 가능하나 권장 범위를 벗어났습니다 (실수 기록).', '#ffb35c');
+    } else {
+      msg('✅ '+(def.okMsg||'적정 범위입니다.'), '#7be495');
+    }
+    nextStepBtn();
+  });
+};
+
+// ---- dragLever: vertical lever with N stops ----
+STEP_RENDERERS.dragLever = function(def){
+  const cx=450;
+  const n = def.positions.length;
+  const topY = 190, botY = 420;
+  const stepY = n>1 ? (botY-topY)/(n-1) : 0;
+  Rect(cx, (topY+botY)/2, 14, botY-topY+40, 0x1b2740,1).setStrokeStyle(2,0x3a4d70);
+  const ys = [];
+  def.positions.forEach((p,i)=>{
+    const y = topY + stepY*i;
+    ys.push(y);
+    T(cx-140, y, p.label, {fontSize:'13px', color: p.correct?'#8fd6ff':'#ffb35c'}).setOrigin(0.5);
+  });
+  let selectedIdx = def.startIndex!==undefined ? def.startIndex : n-1;
+  let lever = Circ(cx, ys[selectedIdx], 20, 0xd8d8d8,1).setStrokeStyle(2,0x888888);
+  makeDraggable(lever, null, (o,x,y)=>{ o.x=cx; o.y=Math.max(topY,Math.min(botY,y)); }, (o)=>{
+    let nearest = 0, best=1e9;
+    ys.forEach((y,i)=>{ const d=Math.abs(o.y-y); if(d<best){best=d; nearest=i;} });
+    o.y = ys[nearest]; selectedIdx = nearest;
+  });
+  makeBtn(450, 490, 180, 42, def.confirmLabel||'설정 확정', ()=>{
+    clearMsgs();
+    const chosen = def.positions[selectedIdx];
+    if(!chosen.correct){
+      addMistake(chosen.msgIfWrong || (def.wrongMsgPrefix||'설정 오류'));
+      msg('⚠️ '+(chosen.msgIfWrong||'올바른 설정이 아닙니다')+' (실수 기록됨).', '#ffb35c');
+    } else {
+      msg('✅ '+(def.okMsg||'올바른 설정입니다.'), '#7be495');
+    }
+    nextStepBtn();
+  });
+};
+
+// ---- decision: measurement + judgment, optional probe drag ----
+STEP_RENDERERS.decision = function(def){
+  const val = Math.round((def.min + Math.random()*(def.max-def.min)) * Math.pow(10,def.decimals||0)) / Math.pow(10,def.decimals||0);
+  let revealed = !def.probeDrag;
+  let readoutText = null;
+  const sampleX = 320, sampleY = 260;
+  Circ(sampleX, sampleY, 60, 0x1b2740,1).setStrokeStyle(2,0x4a5d80);
+  T(sampleX, sampleY-90, def.measureLabel, {fontSize:'13px', color:'#9fb0c9'}).setOrigin(0.5);
+
+  function reveal(){
+    revealed = true;
+    if(readoutText) readoutText.destroy();
+    readoutText = T(sampleX, sampleY, val+(def.unit||''), {fontSize:'19px', color:'#ffe08a', fontStyle:'bold'}).setOrigin(0.5);
+    scene.stepObjects.push(readoutText);
+  }
+  if(def.probeDrag){
+    const probeHome = {x:650, y:150};
+    const probe = Circ(probeHome.x, probeHome.y, 18, 0xb8c4d8,1).setStrokeStyle(2,0xffffff);
+    const pl = T(probeHome.x, probeHome.y, '측정기', {fontSize:'10px', color:'#1a2030'}).setOrigin(0.5);
+    probe._label = pl;
+    makeDraggable(probe, null, null, (o)=>{
+      if(dist(o.x,o.y,sampleX,sampleY) < 70){ reveal(); }
+      else { o.x=probeHome.x; o.y=probeHome.y; o._label.setPosition(o.x,o.y); }
+    });
+  } else { reveal(); }
+
+  makeBtn(600, 350, 220, 46, def.actionGood.label, ()=>{
+    if(!revealed){ clearMsgs(); msg('먼저 측정기로 값을 확인하세요.', '#ffb35c'); return; }
+    clearMsgs();
+    const isGood = def.aboveIsGood ? val > def.threshold : val <= def.threshold;
+    if(isGood){ msg('✅ '+(def.okGoodMsg||'판단이 맞습니다.')+' (실측값: '+val+(def.unit||'')+')', '#7be495'); }
+    else { addMistake(def.mistakeIfWrongGood||'잘못된 판단(정상 처리)', def.mistakeIfWrongGoodWeight||1); msg('⚠️ '+(def.mistakeIfWrongGood||'잘못된 판단입니다')+' (실측값: '+val+(def.unit||')')+' — 실수 기록)', '#ff8a7a'); }
+    nextStepBtn();
+  });
+  makeBtn(600, 410, 220, 46, def.actionBad.label, ()=>{
+    if(!revealed){ clearMsgs(); msg('먼저 측정기로 값을 확인하세요.', '#ffb35c'); return; }
+    clearMsgs();
+    const isBad = def.aboveIsGood ? val <= def.threshold : val > def.threshold;
+    if(isBad){ msg('✅ '+(def.okBadMsg||'판단이 맞습니다.')+' (실측값: '+val+(def.unit||'')+')', '#7be495'); }
+    else { addMistake(def.mistakeIfWrongBad||'잘못된 판단(이상 처리)', def.mistakeIfWrongBadWeight||1); msg('⚠️ '+(def.mistakeIfWrongBad||'잘못된 판단입니다')+' (실측값: '+val+(def.unit||')')+' — 실수 기록)', '#ff8a7a'); }
+    nextStepBtn();
+  });
+};
+
+// ---- calc: numeric text input ----
+STEP_RENDERERS.calc = function(def){
+  let y = 130;
+  def.givenLines.forEach(line=>{ T(120, y, line, {fontSize:'14px', color:'#c9d2e0'}); y += 26; });
+  T(120, y+10, def.calcLabel+':', {fontSize:'15px', color:'#ffffff'});
+  const input = makeHtmlInput(400, y+22, def.placeholder);
+  makeBtn(600, y+22, 140, 40, '확인', ()=>{
+    clearMsgs();
+    const v = parseFloat(input.value);
+    if(isNaN(v)){ msg('숫자를 입력하세요.', '#ffb35c'); return; }
+    if(Math.abs(v-def.target) <= def.tolerance){
+      msg('✅ 정확합니다.', '#7be495');
+      nextStepBtn();
+    } else {
+      addMistake(def.wrongMsgPrefix||'계산 오류');
+      msg('⚠️ '+(def.wrongMsgPrefix||'계산 오류')+' (정답 약 '+def.target.toFixed(2)+(def.unit||'')+') — 다시 계산해보세요.', '#ff8a7a');
+    }
+  });
+};
+
+// ---- clickCount: repeated timed clicks ----
+STEP_RENDERERS.clickCount = function(def){
+  let count = 0, lastTime = 0;
+  Circ(450, 260, 70, 0x1b2740,1).setStrokeStyle(2,0x4a5d80);
+  T(450, 260, def.zoneLabel, {fontSize:'13px', color:'#9fb0c9', align:'center', wordWrap:{width:120}}).setOrigin(0.5);
+  const countText = T(450, 360, count+' / '+def.target, {fontSize:'16px', color:'#ffffff'}).setOrigin(0.5);
+  makeBtn(450, 430, 180, 44, def.btnLabel, ()=>{
+    const now = Date.now();
+    if(lastTime && (now-lastTime) < def.minIntervalMs){
+      addMistake(def.tooFastMsg||'너무 빠른 조작');
+      clearMsgs(); msg('⚠️ '+(def.tooFastMsg||'너무 빠릅니다'), '#ffb35c');
+    }
+    lastTime = now;
+    count++;
+    countText.setText(count+' / '+def.target);
+    if(count >= def.target){
+      clearMsgs(); msg('✅ '+(def.okMsg||'완료했습니다.'), '#7be495');
+      nextStepBtn();
+    }
+  });
+};
+
+// ---- timingBar: progress bar, press at ideal window ----
+STEP_RENDERERS.timingBar = function(def){
+  const barX=250, barY=300, barW=400, barH=28;
+  Rect(barX+barW/2, barY, barW, barH, 0x1b2740,1).setStrokeStyle(2,0x4a5d80);
+  const fill = Rect(barX+2, barY, 2, barH-4, 0x2f7d52, 1).setOrigin(0,0.5);
+  fill.x = barX;
+  const pctText = T(barX+barW+20, barY, '0%', {fontSize:'14px', color:'#fff'}).setOrigin(0,0.5);
+  T(450, barY-40, def.barLabel, {fontSize:'13px', color:'#9fb0c9'}).setOrigin(0.5);
+  scene.bar_progress = 0;
+  scene.bar_done = false;
+  scene._timingTick = function(delta){
+    if(scene.bar_done) return;
+    scene.bar_progress += delta/1000/(def.totalSeconds||6)*100;
+    if(scene.bar_progress >= 145){
+      scene.bar_done = true;
+      addMistake(def.autoMistakeMsg||'시간 초과 자동 처리');
+      clearMsgs(); msg('⚠️ '+(def.autoMistakeMsg||'제때 조작하지 않아 자동 처리되었습니다.'), '#ff8a7a');
+      nextStepBtn();
+      return;
+    }
+    fill.width = Math.min(barW-4, barW*Math.min(scene.bar_progress,100)/100);
+    pctText.setText(Math.round(scene.bar_progress)+'%');
+  };
+  makeBtn(450, 400, 200, 46, def.btnLabel, ()=>{
+    if(scene.bar_done) return;
+    scene.bar_done = true;
+    clearMsgs();
+    if(scene.bar_progress < def.idealMin){ addMistake(def.earlyMsg||'너무 이른 조작'); msg('⚠️ '+(def.earlyMsg||'너무 이릅니다'), '#ff8a7a'); }
+    else if(scene.bar_progress > def.idealMax){ addMistake(def.lateMsg||'너무 늦은 조작'); msg('⚠️ '+(def.lateMsg||'너무 늦습니다'), '#ffb35c'); }
+    else { msg('✅ '+(def.okMsg||'적정 시점에 조작했습니다.'), '#7be495'); }
+    nextStepBtn();
+  });
+};
+
+// ---- multiObservation: N-day visual check ----
+STEP_RENDERERS.multiObservation = function(def){
+  let dayIdx = 0;
+  function renderDay(){
+    scene.stepObjects.forEach(o=>{ if(o._dayObj) o.destroy(); });
+    const d = def.days[dayIdx];
+    const c = Circ(450, 260, 80, d.bad ? 0x6b4a2b : 0x2b5c6b, 1).setStrokeStyle(2, d.bad?0xa87a3a:0x4a8fa8);
+    c._dayObj = true; scene.stepObjects.push(c);
+    const t = T(450, 260, d.label, {fontSize:'13px', color:'#fff', align:'center', wordWrap:{width:140}}).setOrigin(0.5);
+    t._dayObj = true; scene.stepObjects.push(t);
+  }
+  renderDay();
+  makeBtn(320, 420, 180, 44, def.goodBtnLabel, ()=>judge(false));
+  makeBtn(560, 420, 180, 44, def.badBtnLabel, ()=>judge(true));
+  function judge(saysBad){
+    clearMsgs();
+    const d = def.days[dayIdx];
+    if(saysBad && !d.bad){ addMistake(def.falseAlarmMsg||'과잉 판단'); msg('⚠️ '+(def.falseAlarmMsg||'정상인데 이상으로 판단'), '#ffb35c'); }
+    else if(!saysBad && d.bad){ addMistake(def.missedMsg||'이상 미발견', 2); msg('⚠️ '+(def.missedMsg||'이상을 놓쳤습니다'), '#ff8a7a'); }
+    else { msg('✅ '+(d.bad?(def.okBadMsg||'정확히 발견했습니다.'):(def.okGoodMsg||'정상 판단입니다.')), '#7be495'); }
+    dayIdx++;
+    if(dayIdx >= def.days.length){ nextStepBtn(); }
+    else { setTimeout(renderDay, 300); }
+  }
+};
+
+// ---- info: static confirmation ----
+STEP_RENDERERS.info = function(def){
+  T(450, 250, def.msg||'', {fontSize:'15px', color:'#c9d2e0', wordWrap:{width:700}, align:'center'}).setOrigin(0.5);
+  makeBtn(450, 400, 200, 46, '완료', ()=>{ goToStep(curStep+1); });
+};
+
+// ---- dragMultiPlace: N items -> N zones 1:1 mapping (checked with a confirm button, like centrifuge balance) ----
+STEP_RENDERERS.dragMultiPlace = function(def){
+  const trayY = def.trayY || 540;
+  const positions = layoutRow(def.items.length, 230, 670, trayY);
+  scene.slotFill = {};
+  (def.zones||[]).forEach(z=>{
+    Circ(z.x, z.y, def.zoneRadius||45, 0x0e1420,1).setStrokeStyle(2,0x4a5d80);
+    T(z.x, z.y-(def.zoneRadius||45)-16, z.label, {fontSize:'12px', color:'#9fb0c9'}).setOrigin(0.5);
+    scene.slotFill[z.id] = null;
+  });
+  def.items.forEach((it,idx)=>{
+    const home = positions[idx];
+    const obj = Circ(home.x, home.y, def.itemRadius||24, colorFor(idx,it), 1).setStrokeStyle(2,0xffffff);
+    const lbl = T(home.x, home.y, it.label, {fontSize:'11px', color:'#fff', align:'center', wordWrap:{width:56}}).setOrigin(0.5);
+    obj._label = lbl; obj._id = it.id; obj._home = home; obj._slot=null;
+    makeDraggable(obj, null, null, (o)=>{
+      let placed = false;
+      for(const z of def.zones){
+        if(!scene.slotFill[z.id] && dist(o.x,o.y,z.x,z.y) < (def.dropRadius||55)){
+          scene.slotFill[z.id] = o._id; o._slot = z.id;
+          o.x = z.x; o.y = z.y; o._label.setPosition(o.x,o.y);
+          placed = true; break;
+        }
+      }
+      if(!placed){
+        if(o._slot){ scene.slotFill[o._slot]=null; o._slot=null; }
+        o.x=o._home.x; o.y=o._home.y; o._label.setPosition(o.x,o.y);
+      }
+    });
+  });
+  makeBtn(450, 470, 200, 44, def.confirmLabel||'배치 확인', ()=>{
+    clearMsgs();
+    const allFilled = def.zones.every(z=>scene.slotFill[z.id]);
+    if(!allFilled){ msg('모든 위치에 배치하세요.', '#ffb35c'); return; }
+    const allCorrect = def.zones.every(z=> def.correct[scene.slotFill[z.id]] === z.id);
+    if(allCorrect){ msg('✅ '+(def.okMsg||'정확하게 배치했습니다.'), '#7be495'); nextStepBtn(); }
+    else { addMistake(def.wrongMsgPrefix||'배치 오류'); msg('⚠️ 배치가 올바르지 않습니다. 다시 확인하세요.', '#ff8a7a'); }
+  });
+};
+
+function create(){
+  scene = this;
+  scene.stepObjects = [];
+  Rect(450, 8, 900, 16, 0x0a0e16, 1);
+  goToStep(0);
+}
+function update(time, delta){
+  if(scene && scene._timingTick) scene._timingTick(delta);
+}
+
+const config = {
+  type: Phaser.AUTO,
+  width: 900,
+  height: 640,
+  parent: 'gameWrap',
+  backgroundColor: '#0e1420',
+  dom: { createContainer: true },
+  scene: { create: create, update: update }
+};
+new Phaser.Game(config);
+</script>
+</body>
+</html>

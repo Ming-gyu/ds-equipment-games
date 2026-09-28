@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>원심분리기(Harvest) 시뮬레이터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0e1420;color:#e8ecf4;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;}
+  #app{display:flex;flex-direction:row;max-width:1200px;margin:0 auto;}
+  #gameWrap{width:900px;flex:none;}
+  #manualPanel{width:300px;flex:none;background:#f7f5ef;color:#1c2130;padding:16px;box-sizing:border-box;font-size:13px;line-height:1.55;overflow-y:auto;max-height:650px;}
+  #manualPanel h2{font-size:16px;margin:0 0 4px;color:#0b2547;}
+  #manualIntro{font-size:12.5px;color:#5a5f70;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #ddd6c4;}
+  .mstep{padding:10px 10px;margin-bottom:6px;border-radius:8px;border:1px solid #e2ddce;background:#fff;}
+  .mstep.current{border-color:#1c8a6b;background:#eaf6f0;}
+  .mstep.done{opacity:.55;}
+  .mstep .mtitle{font-weight:700;font-size:12.5px;display:flex;justify-content:space-between;}
+  .mstep .mdesc{margin-top:6px;font-size:12px;color:#3d4150;}
+  .mstep.done .mdesc{display:none;}
+  .mstep.upcoming .mdesc{display:none;}
+  #summaryBox{margin-top:14px;padding:10px;border-radius:8px;background:#0b2547;color:#fff;font-size:12.5px;display:none;}
+  .note{max-width:900px;margin:14px auto 0;padding:0 4px;font-size:12.5px;color:#9aa2b5;}
+  .devBox{max-width:900px;margin:14px auto 40px;border:1.5px solid #7a3330;background:#2a1416;border-radius:10px;padding:14px 16px;}
+  .devBox h3{margin:0 0 4px;color:#ff9b8f;font-size:14px;}
+  .devBox .devIntro{font-size:12px;color:#e0b8b3;margin-bottom:10px;}
+  .devList{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:6px;}
+  .devCase{background:#341b1c;border:1px solid #5c2a28;border-radius:8px;padding:10px 12px;}
+  .devCase .dtitle{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:12.5px;color:#ffd7d0;}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;flex:none;margin-left:8px;}
+  .badge.major{background:#7a2d2d;color:#ffd7d0;}
+  .badge.minor{background:#7a5a2d;color:#ffe9c9;}
+  .devCase p{margin:6px 0 0;font-size:12px;color:#d8c3c0;line-height:1.55;}
+  #resultOverlay{position:fixed;inset:0;background:rgba(10,12,18,.82);display:none;align-items:center;justify-content:center;z-index:50;}
+  #resultCard{background:#fff;color:#1c2130;border-radius:14px;padding:28px 32px;max-width:420px;text-align:center;}
+  #resultCard h2{margin:0 0 6px;font-size:26px;}
+  #resultCard .grade{font-size:48px;font-weight:800;margin:10px 0;}
+  #resultCard ul{text-align:left;font-size:13px;line-height:1.6;margin:12px 0 0;padding-left:18px;}
+  #resultCard button{margin-top:16px;padding:10px 20px;border-radius:8px;border:none;background:#0b2547;color:#fff;font-weight:700;cursor:pointer;}
+  input.gameInput{font-size:16px;padding:6px 8px;border-radius:6px;border:1px solid #6a7690;width:130px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gameWrap"><div id="gameCanvas"></div></div>
+  <div id="manualPanel">
+    <h2 id="manualTitle"></h2>
+    <div id="manualIntro"></div>
+    <div id="manualSteps"></div>
+    <div id="summaryBox"></div>
+  </div>
+</div>
+<p class="note" style="text-align:center;">※ 학습용 시뮬레이터입니다. 실제 SOP·파라미터는 기관·제품마다 다를 수 있습니다.</p>
+
+<div class="devBox">
+  <h3>🚨 자주 등장하는 일탈(Deviation) 사례</h3>
+  <div class="devIntro" id="devIntro"></div>
+  <div class="devList" id="devList"></div>
+</div>
+
+<div id="resultOverlay"><div id="resultCard">
+  <h2>결과</h2>
+  <div class="grade" id="gradeText">S</div>
+  <div id="gradeDesc"></div>
+  <ul id="issueList"></ul>
+  <button onclick="location.reload()">다시 하기</button>
+</div></div>
+
+<script>
+const CONFIG = {
+  "title": "원심분리기(Harvest) 시뮬레이터",
+  "manualEmoji": "🌀",
+  "manualIntro": "Downstream의 첫 관문으로, 고속 회전을 이용해 배양액에서 세포·세포 잔해물을 분리해 상등액만 다음 단계로 넘기는 SOP입니다.",
+  "manualSteps": [
+    {
+      "title": "1. 튜브 밸런스 확인",
+      "desc": "원심분리기를 가동하기 전 튜브 간 무게 균형을 반드시 맞춰야 합니다."
+    },
+    {
+      "title": "2. 원심분리 속도 설정",
+      "desc": "세포 수확 단계는 일반적으로 3500~4500rpm 범위에서 진행됩니다."
+    },
+    {
+      "title": "3. 온도 설정 확인",
+      "desc": "온도에 민감한 단백질 보호를 위해 저온(4°C)에서 원심분리하는 것이 일반적입니다."
+    },
+    {
+      "title": "4. 상등액 수거 → 잔사 폐기",
+      "desc": "상등액을 안전하게 옮긴 뒤 남은 잔사를 폐기합니다."
+    },
+    {
+      "title": "5. 상등액 탁도 판단",
+      "desc": "상등액에 탁도가 남아있으면 재원심분리가 필요합니다."
+    },
+    {
+      "title": "6. 배치 기록 작성",
+      "desc": "원심분리 조건(속도·시간·온도)과 결과를 배치 기록에 기재합니다."
+    }
+  ],
+  "deviationCases": [
+    {
+      "title": "튜브 밸런스 불량",
+      "severity": "major",
+      "desc": "튜브 간 무게 균형을 맞추지 않고 가동하면 로터 손상이나 심각한 안전사고로 이어질 수 있습니다."
+    },
+    {
+      "title": "속도·시간 설정 오류",
+      "severity": "major",
+      "desc": "속도나 시간이 부족하면 분리가 불완전해지고, 과도하면 세포 파쇄로 불순물이 오히려 증가할 수 있습니다."
+    },
+    {
+      "title": "온도 설정 오류",
+      "severity": "minor",
+      "desc": "온도에 민감한 단백질의 경우 상온에서 장시간 원심분리하면 품질 저하 위험이 있습니다."
+    },
+    {
+      "title": "상등액 수거 순서 위반",
+      "severity": "minor",
+      "desc": "잔사를 먼저 폐기하기 전에 상등액을 옮기면 재오염 위험이 있습니다."
+    },
+    {
+      "title": "탁도 확인 없이 다음 단계 진행",
+      "severity": "major",
+      "desc": "상등액에 탁도가 남아있는데도 재원심분리 없이 다음 공정(여과)으로 넘겨 필터 막힘을 유발하는 경우입니다."
+    },
+    {
+      "title": "로터 정기 점검 누락",
+      "severity": "minor",
+      "desc": "로터의 마모·부식 여부를 정기적으로 점검하지 않아 장기적으로 안전 위험이 누적되는 경우입니다."
+    }
+  ],
+  "steps": [
+    {
+      "type": "choice",
+      "prompt": "원심분리기에 튜브를 장착하기 전, 어떻게 해야 할까요?",
+      "options": [
+        {
+          "label": "저울로 무게를 맞춰 대칭으로 배치",
+          "correct": true,
+          "msgIfChosenRight": "올바른 절차입니다."
+        },
+        {
+          "label": "무게 확인 없이 바로 장착",
+          "correct": false,
+          "msgIfChosenWrong": "튜브 밸런스 불량 — 로터 손상·안전사고 위험"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "prompt": "원심분리 속도(rpm)를 입력하세요.",
+      "givenText": "권장 범위: 3500~4500rpm",
+      "placeholder": "예: 4000",
+      "hardMin": 1000,
+      "hardMax": 8000,
+      "idealMin": 3500,
+      "idealMax": 4500,
+      "hardMsg": "속도 비현실적 값 — 재입력 필요",
+      "idealMsg": "속도 이상 범위 이탈 — 분리 불완전 또는 세포 파쇄 우려",
+      "okMsgText": "적절한 속도로 설정했습니다",
+      "unit": "rpm"
+    },
+    {
+      "type": "choice",
+      "prompt": "원심분리 온도를 어떻게 설정해야 할까요?",
+      "options": [
+        {
+          "label": "4°C(저온)로 설정",
+          "correct": true,
+          "msgIfChosenRight": "올바른 설정입니다."
+        },
+        {
+          "label": "상온(실온) 그대로 진행",
+          "correct": false,
+          "msgIfChosenWrong": "온도 설정 오류 — 장시간 상온 노출로 품질 저하 위험"
+        }
+      ]
+    },
+    {
+      "type": "dragOrder",
+      "prompt": "원심분리 완료 후, 상등액을 먼저 수거하고 잔사를 폐기하세요.",
+      "zoneLabel": "처리 완료",
+      "itemA": {
+        "label": "상등액 수거"
+      },
+      "itemB": {
+        "label": "잔사 폐기"
+      },
+      "wrongOrderMsg": "상등액 수거 순서 위반 — 잔사를 먼저 처리",
+      "okMsg": "올바른 순서로 처리를 완료했습니다."
+    },
+    {
+      "type": "decision",
+      "prompt": "수거한 상등액의 탁도(NTU) 측정값입니다. 다음 단계 진행 여부를 판단하세요.",
+      "measureLabel": "탁도 (NTU)",
+      "min": 2,
+      "max": 40,
+      "decimals": 0,
+      "unit": " NTU",
+      "threshold": 15,
+      "aboveIsGood": false,
+      "actionGood": {
+        "label": "정상 — 여과 단계로 진행"
+      },
+      "actionBad": {
+        "label": "재원심분리 필요"
+      },
+      "mistakeIfWrongGood": "탁도 확인 없이 다음 단계 진행 — 필터 막힘 위험",
+      "mistakeIfWrongGoodWeight": 2,
+      "mistakeIfWrongBad": "불필요한 재원심분리 — 이미 기준을 충족한 상태",
+      "okGoodMsg": "기준 충족 — 다음 단계로 진행합니다.",
+      "okBadMsg": "올바른 판단 — 재원심분리가 필요합니다."
+    },
+    {
+      "type": "info",
+      "prompt": "배치 기록을 작성해 다음 단계(심층 여과)로 인계하세요.",
+      "btnLabel": "기록 완료 → 종료"
+    }
+  ]
+};
+
+// ---------------- manual panel & deviation box ----------------
+document.getElementById('manualTitle').textContent = CONFIG.manualEmoji + ' ' + CONFIG.title;
+document.getElementById('manualIntro').textContent = CONFIG.manualIntro;
+document.getElementById('devIntro').textContent = CONFIG.devIntro || '이 기구·공정에서 GMP/QC 실무 교육 자료에 자주 언급되는 일반적인 일탈 유형입니다.';
+(function(){
+  const list = document.getElementById('devList');
+  CONFIG.deviationCases.forEach(function(c){
+    const div = document.createElement('div');
+    div.className = 'devCase';
+    div.innerHTML = '<div class="dtitle"><span>'+c.title+'</span><span class="badge '+c.severity+'">'+(c.severity==='major'?'중대':'경미')+'</span></div><p>'+c.desc+'</p>';
+    list.appendChild(div);
+  });
+})();
+
+let currentStepIdx = 0; // 0-based
+let mistakes = 0;
+let issues = [];
+
+function renderManual(){
+  const wrap = document.getElementById('manualSteps');
+  wrap.innerHTML = '';
+  CONFIG.manualSteps.forEach((s, i)=>{
+    const div = document.createElement('div');
+    div.className = 'mstep' + (i===currentStepIdx ? ' current' : (i<currentStepIdx ? ' done' : ' upcoming'));
+    const check = i<currentStepIdx ? '✓ ' : '';
+    div.innerHTML = '<div class="mtitle"><span>'+check+s.title+'</span></div><div class="mdesc">'+s.desc+'</div>';
+    wrap.appendChild(div);
+  });
+  if(currentStepIdx >= CONFIG.manualSteps.length){
+    const sb = document.getElementById('summaryBox');
+    sb.style.display = 'block';
+    sb.textContent = '모든 단계를 완료했습니다. 실수 ' + mistakes + '회 — 결과 화면을 확인하세요.';
+  }
+}
+renderManual();
+
+function addMistake(reason, weight){
+  mistakes += (weight||1);
+  issues.push(reason);
+  flashMsg('⚠ ' + reason, '#c94b3f');
+}
+function okMsg(text){ flashMsg(text, '#1c8a6b'); }
+
+let msgText;
+function flashMsg(text, color){
+  if(msgText){ msgText.setText(text); msgText.setColor(color); msgText.setAlpha(1);
+    scene.tweens.add({targets:msgText, alpha:0, delay:1600, duration:600}); }
+}
+
+function finalizeGame(){
+  document.getElementById('resultOverlay').style.display = 'flex';
+  let grade = 'S', desc = '계산·조작·판단 모두 정확했습니다.';
+  if(mistakes>=5){ grade='C'; desc='여러 실수가 누적되어 품질을 신뢰하기 어렵습니다.'; }
+  else if(mistakes>=1){ grade='B'; desc='진행은 가능하나 몇 가지 개선이 필요합니다.'; }
+  document.getElementById('gradeText').textContent = grade;
+  document.getElementById('gradeDesc').textContent = desc + ' (실수 ' + mistakes + '회)';
+  const ul = document.getElementById('issueList');
+  ul.innerHTML = '';
+  if(issues.length===0){
+    const li = document.createElement('li'); li.textContent = '발생한 품질 이슈 없음'; ul.appendChild(li);
+  } else {
+    issues.forEach(i=>{ const li=document.createElement('li'); li.textContent=i; ul.appendChild(li); });
+  }
+}
+
+// ---------------- Phaser scaffolding ----------------
+let scene;
+const phConfig = {
+  type: Phaser.AUTO,
+  width: 900,
+  height: 650,
+  backgroundColor: '#12182a',
+  parent: 'gameCanvas',
+  dom: { createContainer: true },
+  scene: { create: create, update: update }
+};
+new Phaser.Game(phConfig);
+
+function update(time, delta){
+  if(scene && scene._timingTick) scene._timingTick(delta);
+}
+
+function T(x,y,txt,style){ const o = scene.add.text(x,y,txt,style); scene.stepObjects.push(o); return o; }
+function Rect(x,y,w,h,color,alpha){ const o = scene.add.rectangle(x,y,w,h,color,alpha); scene.stepObjects.push(o); return o; }
+function Circ(x,y,r,color,alpha){ const o = scene.add.circle(x,y,r,color,alpha); scene.stepObjects.push(o); return o; }
+function makeBtn(x,y,w,h,label,onClick,fill){
+  const g = Rect(x,y,w,h,fill||0x1c8a6b).setInteractive({useHandCursor:true});
+  const t = T(x,y,label,{fontSize:'14px', color:'#fff', align:'center', wordWrap:{width:w-16}}).setOrigin(0.5);
+  g.on('pointerdown', onClick);
+  return g;
+}
+function makeHtmlInput(x,y,placeholder){
+  const el = document.createElement('input');
+  el.type = 'text'; el.className='gameInput'; el.placeholder = placeholder||'';
+  const dom = scene.add.dom(x,y,el);
+  scene.stepObjects.push(dom);
+  return el;
+}
+
+function create(){
+  scene = this;
+  scene.stepObjects = [];
+  scene.add.rectangle(450,30,900,60,0x0b1524).setOrigin(0.5,0.5);
+  scene.add.text(20,12,CONFIG.title, {fontSize:'20px', color:'#e8ecf4', fontStyle:'bold'});
+  scene.stepLabel = scene.add.text(700,16,'STEP 1 / ' + CONFIG.steps.length, {fontSize:'16px', color:'#9ad6c9'});
+  msgText = scene.add.text(20,610, '', {fontSize:'14px', color:'#1c8a6b'});
+  goToStep(0);
+}
+
+function clearStep(){
+  scene.stepObjects.forEach(o=>{ if(o && o.destroy) o.destroy(); });
+  scene.stepObjects = [];
+}
+
+function goToStep(i){
+  clearStep();
+  currentStepIdx = i;
+  renderManual();
+  if(i >= CONFIG.steps.length){ finalizeGame(); return; }
+  scene.stepLabel.setText('STEP ' + (i+1) + ' / ' + CONFIG.steps.length);
+  const def = CONFIG.steps[i];
+  T(20,90, (i+1) + '. ' + def.prompt, {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  renderStep(def, ()=>goToStep(i+1));
+}
+
+// ---------------- generic step renderers ----------------
+function renderStep(def, next){
+  const fn = STEP_RENDERERS[def.type];
+  if(!fn){ console.error('unknown step type', def.type); next(); return; }
+  fn(def, next);
+}
+
+const STEP_RENDERERS = {
+  info: function(def, next){
+    makeBtn(450,540,240,54,def.btnLabel||'다음 →', next);
+  },
+  calc: function(def, next){
+    let y = 160;
+    def.givenLines.forEach(line=>{ T(60,y,line,{fontSize:'15px', color:'#ccd3e0'}); y += 34; });
+    T(60,y+16,def.calcLabel,{fontSize:'15px', color:'#9ad6c9'});
+    const input = makeHtmlInput(60 + def.calcLabel.length*7.5 + 40, y+16, def.placeholder||'');
+    makeBtn(60,y+70,220,50,'계산값 확인', ()=>{
+      const v = parseFloat(input.value);
+      if(isNaN(v)){ addMistake('값 미입력 상태로 확인 시도', 1); next(); return; }
+      const diff = Math.abs(v - def.target);
+      if(diff <= def.tolerance){ okMsg('계산이 정확합니다 (' + def.target.toFixed(2) + (def.unit||'') + ').'); }
+      else { addMistake(def.wrongMsgPrefix + ' — 입력값 ' + v + (def.unit||'') + ' (정답 약 ' + def.target.toFixed(2) + (def.unit||'') + ')', 1); }
+      next();
+    });
+  },
+  choice: function(def, next){
+    const n = def.options.length;
+    const w = Math.min(260, Math.floor(820/n));
+    def.options.forEach((opt,idx)=>{
+      const x = 100 + idx*(w+20);
+      makeBtn(x + w/2, 300, w, 60, opt.label, ()=>{
+        if(opt.correct){ okMsg(opt.msgIfChosenRight || '올바른 선택입니다.'); }
+        else { addMistake(opt.msgIfChosenWrong, 1); }
+        next();
+      });
+    });
+  },
+  range: function(def, next){
+    T(60,180,def.givenText,{fontSize:'15px', color:'#9ad6c9', wordWrap:{width:800}});
+    const input = makeHtmlInput(60,230,def.placeholder||'');
+    makeBtn(60,300,220,50,'설정 확인', ()=>{
+      const v = parseFloat(input.value);
+      if(isNaN(v) || v<def.hardMin || v>def.hardMax){
+        addMistake(def.hardMsg + (isNaN(v)?' (미입력)':' ('+v+(def.unit||')')), 1);
+        return; // require re-entry
+      }
+      if(v<def.idealMin || v>def.idealMax){
+        addMistake(def.idealMsg + ' (' + v + (def.unit||'') + ')', 1);
+      } else {
+        okMsg(def.okMsgText + ' (' + v + (def.unit||'') + ')');
+      }
+      next();
+    });
+  },
+  dragOrder: function(def, next){
+    const zone = Rect(680,320,200,200,0x1c8a6b,0.15).setStrokeStyle(2,0x1c8a6b);
+    T(680,210,def.zoneLabel,{fontSize:'13px', color:'#9ad6c9'}).setOrigin(0.5);
+    const zoneRect = new Phaser.Geom.Rectangle(580,220,200,200);
+    let firstDone = false;
+    function makeDraggable(item, origX, origY, isFirstItem){
+      const rect = Rect(origX,origY,140,60,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+      const lbl = T(origX,origY,item.label,{fontSize:'12px', color:'#ccd3e0', align:'center', wordWrap:{width:120}}).setOrigin(0.5);
+      scene.input.setDraggable(rect);
+      rect.on('drag',(p,dx,dy)=>{ rect.x=dx; rect.y=dy; lbl.x=dx; lbl.y=dy; });
+      rect.on('dragend', ()=>{
+        if(Phaser.Geom.Rectangle.Contains(zoneRect, rect.x, rect.y)){
+          rect.disableInteractive(); rect.setFillStyle(0x555f77);
+          if(isFirstItem){ firstDone = true; okMsg(item.label + ' 완료.'); }
+          else {
+            if(!firstDone){ addMistake(def.wrongOrderMsg, 1); }
+            else { okMsg(def.okMsg || '순서대로 완료했습니다.'); }
+            next();
+          }
+        } else { rect.x=origX; rect.y=origY; lbl.x=origX; lbl.y=origY; }
+      });
+    }
+    makeDraggable(def.itemA, 200,300, true);
+    makeDraggable(def.itemB, 200,420, false);
+  },
+  dragSelect: function(def, next){
+    const zone = Rect(680,320,200,200,0x1c8a6b,0.15).setStrokeStyle(2,0x1c8a6b);
+    T(680,210,def.zoneLabel,{fontSize:'13px', color:'#9ad6c9'}).setOrigin(0.5);
+    const zoneRect = new Phaser.Geom.Rectangle(580,220,200,200);
+    const positions = [[150,260],[350,260],[150,420],[350,420]];
+    def.items.forEach((item,idx)=>{
+      const [ox,oy] = positions[idx % positions.length];
+      const rect = Rect(ox,oy,150,70,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+      const lbl = T(ox,oy,item.label,{fontSize:'12px', color:'#ccd3e0', align:'center', wordWrap:{width:130}}).setOrigin(0.5);
+      scene.input.setDraggable(rect);
+      rect.on('drag',(p,dx,dy)=>{ rect.x=dx; rect.y=dy; lbl.x=dx; lbl.y=dy; });
+      rect.on('dragend', ()=>{
+        if(Phaser.Geom.Rectangle.Contains(zoneRect, rect.x, rect.y)){
+          if(item.correct){ okMsg(def.okMsg||'정확합니다.'); next(); }
+          else { addMistake(def.wrongMsgPrefix + ' (' + item.label + ')', 1); rect.x=ox; rect.y=oy; lbl.x=ox; lbl.y=oy; }
+        } else { rect.x=ox; rect.y=oy; lbl.x=ox; lbl.y=oy; }
+      });
+    });
+  },
+  timingBar: function(def, next){
+    Rect(450,300,500,220,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+    T(450,190,def.barLabel,{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+    Rect(450,300,400,40,0x1a2230).setStrokeStyle(1,0x4a7a92);
+    const barFill = Rect(250,300,0,36,0x5fb0c9).setOrigin(0,0.5);
+    const pct = T(450,350,'0%',{fontSize:'14px', color:'#e8ecf4'}).setOrigin(0.5);
+    let progress = 0, running = true;
+    scene.bathBarFill = barFill; scene.bathPctText = pct;
+    scene._timingTick = function(delta){
+      if(!running) return;
+      progress += delta/60;
+      if(progress>100) progress=100;
+      barFill.width = 400*(progress/100);
+      pct.setText(Math.floor(progress)+'%');
+      if(progress>=100 && running){
+        running=false;
+        addMistake(def.autoMistakeMsg, 2);
+        scene._timingTick = null;
+        next();
+      }
+    };
+    makeBtn(450,470,240,54,def.btnLabel||'지금 확인', ()=>{
+      if(!running) return;
+      running = false; scene._timingTick = null;
+      if(progress < def.idealMin){ addMistake(def.earlyMsg, 1); }
+      else if(progress <= def.idealMax){ okMsg(def.okMsg); }
+      else { addMistake(def.lateMsg, 1); }
+      next();
+    });
+  },
+  clickCount: function(def, next){
+    Rect(600,320,220,160,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+    T(600,220,def.zoneLabel||'',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+    const counter = T(600,320, '0 / ' + def.target,{fontSize:'22px', color:'#e8ecf4'}).setOrigin(0.5);
+    let count = 0, lastClick = 0;
+    makeBtn(300,320,220,60,def.btnLabel, ()=>{
+      const now = Date.now();
+      if(lastClick && (now-lastClick) < def.minIntervalMs){
+        addMistake(def.tooFastMsg, 1);
+        count = 0; counter.setText('0 / ' + def.target);
+        lastClick = now;
+        return;
+      }
+      lastClick = now;
+      count++;
+      counter.setText(count + ' / ' + def.target);
+      if(count >= def.target){ okMsg(def.okMsg); next(); }
+    });
+  },
+  decision: function(def, next){
+    const val = +(def.min + Math.random()*(def.max-def.min)).toFixed(def.decimals);
+    Rect(250,300,260,140,0x394159).setStrokeStyle(2,0x6a7690);
+    T(250,220,def.measureLabel,{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+    T(250,300, val + (def.unit||''),{fontSize:'26px', color:'#e8ecf4'}).setOrigin(0.5);
+    const isGood = def.aboveIsGood ? (val >= def.threshold) : (val <= def.threshold);
+    makeBtn(620,270,220,54,def.actionGood.label, ()=>{
+      if(isGood){ okMsg(def.okGoodMsg); } else { addMistake(def.mistakeIfWrongGood, def.mistakeIfWrongGoodWeight||1); }
+      next();
+    });
+    makeBtn(620,340,220,54,def.actionBad.label, ()=>{
+      if(!isGood){ okMsg(def.okBadMsg); } else { addMistake(def.mistakeIfWrongBad, def.mistakeIfWrongBadWeight||1); }
+      next();
+    });
+  },
+  multiObservation: function(def, next){
+    let dayIdx = 0;
+    function renderDay(){
+      clearStep();
+      T(20,90, def.prompt, {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+      const day = def.days[dayIdx];
+      const color = day.bad ? 0xb08a2a : 0xc9526a;
+      Circ(450,280,90,color, day.bad?0.5:0.85);
+      T(450,280, day.label + (day.bad ? '\n('+(def.badDesc||'이상 징후')+')' : '\n('+(def.goodDesc||'정상')+')'), {fontSize:'15px', color:'#e8ecf4', align:'center'}).setOrigin(0.5);
+      makeBtn(280,420,220,54,def.goodBtnLabel, ()=>{
+        if(day.bad){ addMistake(def.missedMsg, 1); } else { okMsg(def.okGoodMsg); }
+        advance();
+      });
+      makeBtn(560,420,220,54,def.badBtnLabel, ()=>{
+        if(day.bad){ okMsg(def.okBadMsg); } else { addMistake(def.falseAlarmMsg, 1); }
+        advance();
+      });
+    }
+    function advance(){
+      dayIdx++;
+      if(dayIdx >= def.days.length){ next(); } else { renderDay(); }
+    }
+    renderDay();
+  },
+  clickOrder: function(def, next){
+    const order = def.items.slice();
+    const shuffled = order.map((v,i)=>({label:v,idx:i})).sort(()=>Math.random()-0.5);
+    let progressIdx = 0;
+    const btns = [];
+    shuffled.forEach((it,pos)=>{
+      const col = pos % 3, row = Math.floor(pos/3);
+      const x = 180 + col*260, y = 260 + row*100;
+      const b = makeBtn(x,y,220,64, it.label, ()=>{
+        if(it.idx === progressIdx){
+          b.setFillStyle(0x555f77);
+          b.disableInteractive();
+          progressIdx++;
+          if(progressIdx >= order.length){ okMsg(def.okMsg||'순서가 정확합니다.'); next(); }
+        } else {
+          addMistake(def.wrongMsg, 1);
+          progressIdx = 0;
+          btns.forEach(bb=>{ bb.setFillStyle(0x1c8a6b); bb.setInteractive({useHandCursor:true}); });
+        }
+      });
+      btns.push(b);
+    });
+  }
+};
+</script>
+</body>
+</html>

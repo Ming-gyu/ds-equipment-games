@@ -1,0 +1,465 @@
+<title>DS 공정장비 실전게임</title>
+<style>
+:root{
+  --bg:#f3f6f3;
+  --surface:#ffffff;
+  --surface-2:#eaf0ea;
+  --ink:#16211c;
+  --muted:#5b6b62;
+  --accent:#1f6f5c;
+  --accent-ink:#ffffff;
+  --accent-2:#b5722f;
+  --accent-2-soft:#f3e2cd;
+  --accent-soft:#dcede6;
+  --border:#d7e0da;
+  --mono-border:#c7d3cb;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1512;
+    --surface:#121f1a;
+    --surface-2:#16261f;
+    --ink:#e9f1ec;
+    --muted:#93a69b;
+    --accent:#4fd8ab;
+    --accent-ink:#0c1512;
+    --accent-2:#e2a15a;
+    --accent-2-soft:#2c2114;
+    --accent-soft:#173229;
+    --border:#213229;
+    --mono-border:#2a3c33;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1512;
+  --surface:#121f1a;
+  --surface-2:#16261f;
+  --ink:#e9f1ec;
+  --muted:#93a69b;
+  --accent:#4fd8ab;
+  --accent-ink:#0c1512;
+  --accent-2:#e2a15a;
+  --accent-2-soft:#2c2114;
+  --accent-soft:#173229;
+  --border:#213229;
+  --mono-border:#2a3c33;
+  color-scheme:dark;
+}
+
+* { box-sizing:border-box; }
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'IBM Plex Sans KR','IBM Plex Sans',system-ui,sans-serif;
+  margin:0;
+  padding-inline:20px;
+  padding-block:28px 60px;
+}
+a{color:inherit;}
+
+.shell{ max-width:1080px; margin:0 auto; }
+
+header.hub{
+  border:1px solid var(--border);
+  background:var(--surface);
+  border-radius:14px;
+  padding:28px clamp(18px,4vw,34px);
+  display:flex;
+  flex-wrap:wrap;
+  gap:24px;
+  align-items:flex-end;
+  justify-content:space-between;
+  margin-bottom:28px;
+}
+.hub-title-block{ max-width:640px; }
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin:0 0 10px;
+}
+h1{
+  font-size:clamp(26px,4vw,36px);
+  line-height:1.15;
+  margin:0 0 10px;
+  text-wrap:balance;
+  font-weight:700;
+}
+.hub-sub{
+  color:var(--muted);
+  font-size:15px;
+  line-height:1.6;
+  margin:0;
+}
+.hub-stats{
+  display:flex;
+  gap:18px;
+  font-family:'IBM Plex Mono',monospace;
+}
+.stat{
+  text-align:right;
+  border-left:1px solid var(--border);
+  padding-left:18px;
+}
+.stat:first-child{ border-left:none; padding-left:0; }
+.stat .num{
+  display:block;
+  font-size:28px;
+  font-weight:600;
+  font-variant-numeric:tabular-nums;
+  color:var(--accent);
+}
+.stat .label{
+  display:block;
+  font-size:11px;
+  color:var(--muted);
+  letter-spacing:.06em;
+  margin-top:2px;
+}
+
+.legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 18px;
+  margin-bottom:32px;
+  font-size:13px;
+  color:var(--muted);
+  align-items:center;
+}
+.legend .chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+.dot{
+  width:9px;height:9px;border-radius:50%;
+  display:inline-block;
+}
+.dot.drag{ background:var(--accent); }
+.dot.reuse{ background:var(--accent-2); }
+
+.section{ margin-bottom:36px; }
+.section-head{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  margin-bottom:14px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.section-head h2{
+  font-size:19px;
+  margin:0;
+  font-weight:700;
+}
+.section-head .range{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  color:var(--muted);
+  letter-spacing:.04em;
+}
+.section-desc{
+  font-size:13px;
+  color:var(--muted);
+  margin:-6px 0 16px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:12px;
+}
+
+.card{
+  border:1px solid var(--border);
+  background:var(--surface);
+  border-radius:12px;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-height:150px;
+}
+.card-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:8px;
+}
+.card-index{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  color:var(--muted);
+  letter-spacing:.05em;
+}
+.badge{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10.5px;
+  letter-spacing:.03em;
+  padding:3px 8px;
+  border-radius:999px;
+  white-space:nowrap;
+}
+.badge.drag{ background:var(--accent-soft); color:var(--accent); }
+.badge.reuse{ background:var(--accent-2-soft); color:var(--accent-2); }
+
+.card h3{
+  margin:0;
+  font-size:16.5px;
+  line-height:1.3;
+  font-weight:700;
+}
+.card p{
+  margin:0;
+  font-size:12.5px;
+  color:var(--muted);
+  line-height:1.5;
+  flex:1;
+}
+
+.play{
+  margin-top:auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border:1px solid var(--accent);
+  background:var(--accent);
+  color:var(--accent-ink);
+  font-weight:600;
+  font-size:13px;
+  text-decoration:none;
+  padding:9px 12px;
+  border-radius:8px;
+  transition:opacity .15s ease;
+}
+.play:hover{ opacity:.85; }
+.play::after{ content:"→"; }
+
+footer{
+  margin-top:40px;
+  padding-top:18px;
+  border-top:1px solid var(--border);
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.7;
+}
+
+@media (max-width:520px){
+  header.hub{ flex-direction:column; align-items:flex-start; }
+  .hub-stats{ align-self:stretch; justify-content:space-between; }
+}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<div class="shell">
+
+  <header class="hub">
+    <div class="hub-title-block">
+      <p class="eyebrow">Celltrion DS 실전 대비 · SOP 시뮬레이터 모음</p>
+      <h1>DS 공정장비 실전 게임 21종</h1>
+      <p class="hub-sub">Upstream → Downstream → 지원기구 순서로 배치된 DS 생산공정 장비 도감. 카드를 눌러 각 장비의 실전 시뮬레이터를 새 탭에서 실행한다.</p>
+    </div>
+    <div class="hub-stats">
+      <div class="stat"><span class="num">21</span><span class="label">전체 장비</span></div>
+      <div class="stat"><span class="num">19</span><span class="label">드래그 조작</span></div>
+      <div class="stat"><span class="num">2</span><span class="label">기존 자산 재사용</span></div>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span class="chip"><span class="dot drag"></span>드래그 시뮬레이터 — 다이얼·레버·오브젝트를 직접 조작</span>
+    <span class="chip"><span class="dot reuse"></span>기존 자산 재사용 — 5번 시리즈 완성본 원본 그대로</span>
+  </div>
+
+  <section class="section" id="upstream">
+    <div class="section-head">
+      <h2>Upstream</h2>
+      <span class="range">01 – 07</span>
+    </div>
+    <p class="section-desc">세포주 해동부터 배양·모니터링까지, 세포를 키우는 공정 장비.</p>
+    <div class="grid">
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">01</span><span class="badge drag">드래그</span></div>
+        <h3>크라이오바이알</h3>
+        <p>세포주 해동 및 생존율 확인 SOP. 라벨 대조 후 바이알을 드래그로 인출한다.</p>
+        <a class="play" href="games/cryovial_thaw_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">02</span><span class="badge drag">드래그</span></div>
+        <h3>진탕 플라스크</h3>
+        <p>초기 배양 접종 및 진탕 조건 설정. 배지 → 세포 드래그 순서로 접종한다.</p>
+        <a class="play" href="games/shakeflask_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">03</span><span class="badge drag">드래그</span></div>
+        <h3>스피너 플라스크</h3>
+        <p>현탁배양 교반 조건과 계산, 배지 교환 순서를 드래그로 조작한다.</p>
+        <a class="play" href="games/spinnerflask_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">04</span><span class="badge drag">드래그</span></div>
+        <h3>일회용 배양백</h3>
+        <p>Single-use bag 무균 연결 및 배양 SOP. 배관 연결 순서와 다이얼 조작을 포함한다.</p>
+        <a class="play" href="games/singleusebag_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">05</span><span class="badge drag">드래그</span></div>
+        <h3>교반탱크형 배양기(STR)</h3>
+        <p>교반·통기·온도를 다이얼로 제어하며 배양을 운전하는 SOP.</p>
+        <a class="play" href="games/str_bioreactor_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">06</span><span class="badge drag">드래그</span></div>
+        <h3>pH·DO 프로브</h3>
+        <p>프로브 보정 절차와 배양 중 실시간 모니터링 판정을 드래그로 수행한다.</p>
+        <a class="play" href="games/ph_do_probe_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">07</span><span class="badge drag">드래그</span></div>
+        <h3>세포 계수기</h3>
+        <p>세포 농도·생존율 측정과 계산, 합격 판정을 진행한다.</p>
+        <a class="play" href="games/cellcounter_game_prototype.html">게임 실행</a>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="section" id="downstream">
+    <div class="section-head">
+      <h2>Downstream</h2>
+      <span class="range">08 – 16</span>
+    </div>
+    <p class="section-desc">수확부터 정제·바이러스 제거까지, 원료의약물질을 정제하는 공정 장비.</p>
+    <div class="grid">
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">08</span><span class="badge drag">드래그</span></div>
+        <h3>원심분리기</h3>
+        <p>세포 수확 원심분리, 로터 밸런스 맞추기와 상등액/펠렛 분리 판정. (파일럿 검증본)</p>
+        <a class="play" href="games/centrifuge_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">09</span><span class="badge drag">드래그</span></div>
+        <h3>심층 여과기</h3>
+        <p>Depth filtration 청징화 공정. 유량·압력을 레버·다이얼로 제어한다.</p>
+        <a class="play" href="games/depthfilter_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">10</span><span class="badge drag">드래그</span></div>
+        <h3>크로마토그래피 시스템</h3>
+        <p>컬럼 연결 순서, 유량·압력 설정 등 정제 시스템 운전 전 점검.</p>
+        <a class="play" href="games/chromatography_system_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">11</span><span class="badge drag">드래그</span></div>
+        <h3>Protein A 컬럼</h3>
+        <p>친화크로마토그래피 평형화 → 로딩 → 세척 → 용리 → 재생 5단계 순서.</p>
+        <a class="play" href="games/proteinA_column_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">12</span><span class="badge drag">드래그</span></div>
+        <h3>이온교환 컬럼</h3>
+        <p>CEX/AEX 선택, 구배·단계 용리 방식을 레버로 결정한다.</p>
+        <a class="play" href="games/ionexchange_column_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">13</span><span class="badge drag">드래그</span></div>
+        <h3>SEC 컬럼</h3>
+        <p>크기배제크로마토그래피 완충액 선택과 순도 판정을 진행한다.</p>
+        <a class="play" href="games/sec_column_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">14</span><span class="badge drag">드래그</span></div>
+        <h3>바이러스 불활성화조</h3>
+        <p>저pH 불활성화 SOP. pH 다이얼과 교반, 최소 유지시간 타이밍바를 다룬다.</p>
+        <a class="play" href="games/viral_inactivation_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">15</span><span class="badge drag">드래그</span></div>
+        <h3>바이러스 여과기</h3>
+        <p>나노여과 무결성 확인 절차. 측정기 드래그로 값을 확인 후 판정한다.</p>
+        <a class="play" href="games/virusfilter_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">16</span><span class="badge drag">드래그</span></div>
+        <h3>TFF 시스템(UF/DF)</h3>
+        <p>한외여과·透析여과 TMP 다이얼 제어와 UF/DF 순서 배치.</p>
+        <a class="play" href="games/tff_udf_game_prototype.html">게임 실행</a>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="section" id="support">
+    <div class="section-head">
+      <h2>지원기구</h2>
+      <span class="range">17 – 21</span>
+    </div>
+    <p class="section-desc">공정 전반에서 반복 사용되는 무균·계측 지원 장비.</p>
+    <div class="grid">
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">17</span><span class="badge drag">드래그</span></div>
+        <h3>생물안전작업대(BSC)</h3>
+        <p>가동 전 점검, 물품 배치, 기류 확인 절차를 드래그로 진행한다.</p>
+        <a class="play" href="games/bsc_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">18</span><span class="badge reuse">재사용</span></div>
+        <h3>고압멸균기</h3>
+        <p>오토클레이브 멸균 사이클 운전 (심화판). 5번 시리즈 원본 그대로.</p>
+        <a class="play" href="games/autoclave_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">19</span><span class="badge reuse">재사용</span></div>
+        <h3>마이크로피펫</h3>
+        <p>정밀 피펫팅 3D 시뮬레이터. 5번 시리즈 원본 그대로 (Three.js 3D).</p>
+        <a class="play" href="games/micropipette_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">20</span><span class="badge drag">드래그</span></div>
+        <h3>정밀저울</h3>
+        <p>수평·영점 조정, 계량값 확인과 체크웨이트 검증 SOP.</p>
+        <a class="play" href="games/balance_game_prototype.html">게임 실행</a>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><span class="card-index">21</span><span class="badge drag">드래그</span></div>
+        <h3>pH 미터</h3>
+        <p>전극 보관·보정버퍼 순서·온도보정 계산과 세척 재측정 판정.</p>
+        <a class="play" href="games/phmeter_game_prototype.html">게임 실행</a>
+      </article>
+
+    </div>
+  </section>
+
+  <footer>
+    각 게임은 900px 캔버스 + 오른쪽 학습 설명서 패널 + 하단 일탈사례 박스(6개)로 구성되며, 조작 실수 횟수에 따라 S(0회)·B(1~4회)·C(5회 이상) 등급이 매겨진다. 인터넷 연결이 필요하다(엔진 로드: Phaser.js cdnjs / 19번은 Three.js). 새로 제작한 19종(01~17, 20~21)은 이 세션에서 브라우저 렌더링을 직접 검증하지 못했으므로 실제 조작감은 플레이하며 확인이 필요하다. 18·19번은 이전에 완성·검수된 원본을 수정 없이 그대로 사용했다.
+  </footer>
+
+</div>

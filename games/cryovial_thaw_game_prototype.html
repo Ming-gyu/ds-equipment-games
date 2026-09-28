@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>크라이오바이알 해동 시뮬레이터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0e1420;color:#e8ecf4;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;}
+  #app{display:flex;flex-direction:row;max-width:1200px;margin:0 auto;}
+  #gameWrap{width:900px;flex:none;}
+  #manualPanel{width:300px;flex:none;background:#f7f5ef;color:#1c2130;padding:16px;box-sizing:border-box;font-size:13px;line-height:1.55;overflow-y:auto;max-height:650px;}
+  #manualPanel h2{font-size:16px;margin:0 0 4px;color:#0b2547;}
+  #manualIntro{font-size:12.5px;color:#5a5f70;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #ddd6c4;}
+  .mstep{padding:10px 10px;margin-bottom:6px;border-radius:8px;border:1px solid #e2ddce;background:#fff;}
+  .mstep.current{border-color:#1c8a6b;background:#eaf6f0;}
+  .mstep.done{opacity:.55;}
+  .mstep .mtitle{font-weight:700;font-size:12.5px;display:flex;justify-content:space-between;}
+  .mstep .mdesc{margin-top:6px;font-size:12px;color:#3d4150;}
+  .mstep.done .mdesc{display:none;}
+  .mstep.upcoming .mdesc{display:none;}
+  #summaryBox{margin-top:14px;padding:10px;border-radius:8px;background:#0b2547;color:#fff;font-size:12.5px;display:none;}
+  .note{max-width:900px;margin:14px auto 0;padding:0 4px;font-size:12.5px;color:#9aa2b5;}
+  .devBox{max-width:900px;margin:14px auto 40px;border:1.5px solid #7a3330;background:#2a1416;border-radius:10px;padding:14px 16px;}
+  .devBox h3{margin:0 0 4px;color:#ff9b8f;font-size:14px;}
+  .devBox .devIntro{font-size:12px;color:#e0b8b3;margin-bottom:10px;}
+  .devList{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:6px;}
+  .devCase{background:#341b1c;border:1px solid #5c2a28;border-radius:8px;padding:10px 12px;}
+  .devCase .dtitle{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:12.5px;color:#ffd7d0;}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;}
+  .badge.major{background:#7a2d2d;color:#ffd7d0;}
+  .badge.minor{background:#7a5a2d;color:#ffe9c9;}
+  .devCase p{margin:6px 0 0;font-size:12px;color:#d8c3c0;line-height:1.55;}
+  #resultOverlay{position:fixed;inset:0;background:rgba(10,12,18,.82);display:none;align-items:center;justify-content:center;z-index:50;}
+  #resultCard{background:#fff;color:#1c2130;border-radius:14px;padding:28px 32px;max-width:420px;text-align:center;}
+  #resultCard h2{margin:0 0 6px;font-size:26px;}
+  #resultCard .grade{font-size:48px;font-weight:800;margin:10px 0;}
+  #resultCard ul{text-align:left;font-size:13px;line-height:1.6;margin:12px 0 0;padding-left:18px;}
+  #resultCard button{margin-top:16px;padding:10px 20px;border-radius:8px;border:none;background:#0b2547;color:#fff;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gameWrap"><div id="gameCanvas"></div></div>
+  <div id="manualPanel">
+    <h2>🧊 크라이오바이알 해동</h2>
+    <div id="manualIntro">액체질소 세포은행에서 세포주를 꺼내 배양 가능한 상태로 되살리는, DS 공정 Upstream의 첫 SOP입니다. 각 단계를 진행하면 아래 설명이 자동으로 강조됩니다.</div>
+    <div id="manualSteps"></div>
+    <div id="summaryBox"></div>
+  </div>
+</div>
+<p class="note" style="text-align:center;">※ 학습용 시뮬레이터입니다. 실제 SOP·파라미터는 기관·제품마다 다를 수 있습니다.</p>
+
+<div class="devBox">
+  <h3>🚨 자주 등장하는 일탈(Deviation) 사례</h3>
+  <div class="devIntro">크라이오바이알 해동·세포 회복 공정에서 GMP/세포배양 실무 교육 자료에 자주 언급되는 일반적인 일탈 유형입니다.</div>
+  <div class="devList">
+    <div class="devCase"><div class="dtitle">LN2 잔류로 인한 바이알 파열<span class="badge major">중대</span></div><p>밀봉이 불완전한 바이알은 액체질소 보관 중 미세한 균열로 질소가 스며들 수 있고, 상온·수조에서 급격히 기화·팽창하며 파열될 위험이 있습니다. 안면보호구·저온장갑 없이 취급하다 발생한 부상 사례가 반복적으로 보고됩니다.</p></div>
+    <div class="devCase"><div class="dtitle">세포주 라벨 오인출<span class="badge major">중대</span></div><p>클론 번호가 유사한 바이알(예: 7A/7B)을 육안으로만 확인해 잘못 반출하는 사례. 2인 확인(Double-check) 또는 바코드 스캔 절차가 생략되면 발생 빈도가 높아지며, 발견이 늦어질수록 하위 공정 전체를 폐기해야 하는 손실로 이어집니다.</p></div>
+    <div class="devCase"><div class="dtitle">해동 시간 초과 방치<span class="badge major">중대</span></div><p>37°C 수조에 넣은 뒤 다른 작업을 하다 완전히 녹은 상태로 장시간 방치하는 경우. 작은 얼음 결정이 남아있는 시점에 꺼내야 하는데 이를 넘기면 삼투압 스트레스와 온도 스트레스가 겹쳐 생존율이 급격히 떨어집니다.</p></div>
+    <div class="devCase"><div class="dtitle">DMSO 제거 지연<span class="badge major">중대</span></div><p>동결보호제인 DMSO는 상온에서 세포에 독성을 나타내므로, 해동 직후 신속히 희석·원심분리로 제거해야 합니다. 원심분리 후 상등액 제거를 지체하거나 다른 업무로 자리를 비우면 세포독성 노출 시간이 길어져 생존율 저하 원인이 됩니다.</p></div>
+    <div class="devCase"><div class="dtitle">희석 속도(Dropwise) 미준수<span class="badge minor">경미</span></div><p>예열된 배지를 한 번에 부어 급격한 삼투압 변화를 유발하는 경우. SOP상 방울 단위로 서서히 첨가하도록 규정되어 있음에도 시간 단축을 위해 생략하는 사례가 교육 자료에 종종 언급됩니다.</p></div>
+    <div class="devCase"><div class="dtitle">생존율 기준 미달 상태로 진행 승인<span class="badge minor">경미</span></div><p>트리판블루 배제법으로 확인한 생존율이 기준(통상 80% 내외) 미만인데도 재작업 없이 다음 단계로 진행 승인하는 경우. 초기 단계의 낮은 생존율은 배양이 진행될수록 격차가 커져 배치 전체 품질 이슈로 이어질 수 있습니다.</p></div>
+  </div>
+</div>
+
+<div id="resultOverlay"><div id="resultCard">
+  <h2>결과</h2>
+  <div class="grade" id="gradeText">S</div>
+  <div id="gradeDesc"></div>
+  <ul id="issueList"></ul>
+  <button onclick="location.reload()">다시 하기</button>
+</div></div>
+
+<script>
+const MANUAL_STEPS = [
+  {title:"1. PPE 착용", desc:"액체질소 보관 바이알은 미세 균열로 질소가 스며들 수 있어, 상온·수조 노출 시 파열 위험이 있습니다. 안면보호구와 저온장갑을 반드시 먼저 착용합니다."},
+  {title:"2. 세포은행에서 바이알 인출", desc:"라벨을 정확히 대조해 목표 세포주(클론 번호)를 확인한 뒤 인출합니다. 유사 클론 번호를 혼동하면 하위 공정 전체를 다시 해야 합니다."},
+  {title:"3. 37°C 수조 해동", desc:"작은 얼음 결정이 남아있는 시점(완전히 녹기 직전)에 꺼내는 것이 이상적입니다. 너무 이르면 미해동, 너무 늦으면 온도·삼투압 이중 스트레스로 생존율이 떨어집니다."},
+  {title:"4. 소독 후 클린벤치 반입", desc:"바이알 외부를 70% 에탄올로 소독한 뒤에만 무균 작업대(클린벤치)로 반입합니다. 소독 없이 반입하면 외부 오염원을 함께 들여오게 됩니다."},
+  {title:"5. 예열 배지에 Dropwise 희석", desc:"DMSO가 포함된 세포현탁액을 예열된 배지에 한 번에 붓지 않고 방울 단위로 서서히 첨가해, 급격한 삼투압 변화(쇼크)를 방지합니다."},
+  {title:"6. 원심분리 및 DMSO 제거", desc:"원심분리로 세포를 가라앉힌 뒤 DMSO가 남은 상등액을 신속히 제거하고 신선한 배지로 재현탁합니다. DMSO 노출 시간이 길어질수록 세포독성 위험이 커집니다."},
+  {title:"7. 생존율 확인 및 이동", desc:"세포 계수기(트리판블루 배제법)로 생존율을 확인해 기준(약 80%) 충족 여부를 판단한 뒤, 통과 시에만 다음 배양 단계(진탕 플라스크)로 이동합니다."}
+];
+
+let currentStep = 1;
+let mistakes = 0;
+let issues = [];
+
+function renderManual(){
+  const wrap = document.getElementById('manualSteps');
+  wrap.innerHTML = '';
+  MANUAL_STEPS.forEach((s, i)=>{
+    const n = i+1;
+    const div = document.createElement('div');
+    div.className = 'mstep' + (n===currentStep ? ' current' : (n<currentStep ? ' done' : ' upcoming'));
+    const check = n<currentStep ? '✓ ' : '';
+    div.innerHTML = '<div class="mtitle"><span>'+check+s.title+'</span></div><div class="mdesc">'+s.desc+'</div>';
+    wrap.appendChild(div);
+  });
+  if(currentStep > MANUAL_STEPS.length){
+    const sb = document.getElementById('summaryBox');
+    sb.style.display = 'block';
+    sb.textContent = '모든 단계를 완료했습니다. 실수 ' + mistakes + '회 — 결과 화면을 확인하세요.';
+  }
+}
+renderManual();
+
+function addMistake(reason, weight){
+  mistakes += (weight||1);
+  issues.push(reason);
+  flashMsg('⚠ ' + reason, '#c94b3f');
+}
+function okMsg(text){ flashMsg(text, '#1c8a6b'); }
+
+let msgText;
+function flashMsg(text, color){
+  if(msgText){ msgText.setText(text); msgText.setColor(color); msgText.setAlpha(1);
+    scene.tweens.add({targets:msgText, alpha:0, delay:1600, duration:600}); }
+}
+
+function finalizeGame(){
+  document.getElementById('resultOverlay').style.display = 'flex';
+  let grade = 'S', desc = '완벽한 무균·무결 처리입니다.';
+  if(mistakes>=5){ grade='C'; desc='여러 실수가 누적되어 세포 회복 품질을 신뢰하기 어렵습니다.'; }
+  else if(mistakes>=1){ grade='B'; desc='진행은 가능하나 몇 가지 개선이 필요합니다.'; }
+  document.getElementById('gradeText').textContent = grade;
+  document.getElementById('gradeDesc').textContent = desc + ' (실수 ' + mistakes + '회)';
+  const ul = document.getElementById('issueList');
+  ul.innerHTML = '';
+  if(issues.length===0){
+    const li = document.createElement('li'); li.textContent = '발생한 품질 이슈 없음'; ul.appendChild(li);
+  } else {
+    issues.forEach(i=>{ const li=document.createElement('li'); li.textContent=i; ul.appendChild(li); });
+  }
+}
+
+let scene;
+const config = {
+  type: Phaser.AUTO,
+  width: 900,
+  height: 650,
+  backgroundColor: '#12182a',
+  parent: 'gameCanvas',
+  scene: { create: create, update: update }
+};
+new Phaser.Game(config);
+
+let ppeFace=false, ppeGlove=false;
+let bathProgress=0, bathRunning=false, bathDone=false;
+let dilutionClicks=0, lastDilutionClick=0;
+let centrifugeDone=false, supernatantRemoved=false, resuspended=false;
+let viability=0;
+
+function create(){
+  scene = this;
+  this.add.rectangle(450,30,900,60,0x0b1524).setOrigin(0.5,0.5);
+  this.add.text(20,12,'크라이오바이알 해동 시뮬레이터', {fontSize:'20px', color:'#e8ecf4', fontStyle:'bold'});
+  this.stepLabel = this.add.text(700,16,'STEP 1 / 7', {fontSize:'16px', color:'#9ad6c9'});
+  msgText = this.add.text(20,610, '', {fontSize:'14px', color:'#1c8a6b'});
+  this.stepObjects = [];
+  setupStep1.call(this);
+}
+
+function clearStep(){
+  scene.stepObjects.forEach(o=>o.destroy());
+  scene.stepObjects = [];
+}
+
+function goToStep(n){
+  clearStep();
+  currentStep = n;
+  scene.stepLabel.setText('STEP ' + Math.min(n,7) + ' / 7');
+  renderManual();
+  if(n===1) setupStep1.call(scene);
+  else if(n===2) setupStep2.call(scene);
+  else if(n===3) setupStep3.call(scene);
+  else if(n===4) setupStep4.call(scene);
+  else if(n===5) setupStep5.call(scene);
+  else if(n===6) setupStep6.call(scene);
+  else if(n===7) setupStep7.call(scene);
+  else finalizeGame();
+}
+
+function makeBtn(x,y,w,h,label,onClick){
+  const g = scene.add.rectangle(x,y,w,h,0x1c8a6b).setInteractive({useHandCursor:true});
+  const t = scene.add.text(x,y,label,{fontSize:'14px', color:'#fff'}).setOrigin(0.5);
+  g.on('pointerdown', onClick);
+  scene.stepObjects.push(g,t);
+  return g;
+}
+
+// ---------- STEP 1: PPE ----------
+function setupStep1(){
+  scene.stepObjects.push(scene.add.text(20,90,'① 개인보호구(PPE)를 착용하세요.', {fontSize:'16px', color:'#e8ecf4'}).setDepth(1));
+
+  const faceIcon = scene.add.circle(200,220,50,0x394159).setInteractive({useHandCursor:true});
+  const faceTxt = scene.add.text(200,220,'안면\n보호구',{fontSize:'13px', color:'#ccd3e0', align:'center'}).setOrigin(0.5);
+  const faceState = scene.add.text(200,290,'미착용',{fontSize:'13px', color:'#c94b3f'}).setOrigin(0.5);
+  faceIcon.on('pointerdown', ()=>{
+    ppeFace = !ppeFace;
+    faceIcon.setFillStyle(ppeFace?0x1c8a6b:0x394159);
+    faceState.setText(ppeFace?'착용됨':'미착용'); faceState.setColor(ppeFace?'#1c8a6b':'#c94b3f');
+  });
+
+  const gloveIcon = scene.add.circle(400,220,50,0x394159).setInteractive({useHandCursor:true});
+  const gloveTxt = scene.add.text(400,220,'저온\n장갑',{fontSize:'13px', color:'#ccd3e0', align:'center'}).setOrigin(0.5);
+  const gloveState = scene.add.text(400,290,'미착용',{fontSize:'13px', color:'#c94b3f'}).setOrigin(0.5);
+  gloveIcon.on('pointerdown', ()=>{
+    ppeGlove = !ppeGlove;
+    gloveIcon.setFillStyle(ppeGlove?0x1c8a6b:0x394159);
+    gloveState.setText(ppeGlove?'착용됨':'미착용'); gloveState.setColor(ppeGlove?'#1c8a6b':'#c94b3f');
+  });
+
+  scene.stepObjects.push(faceIcon, faceTxt, faceState, gloveIcon, gloveTxt, gloveState);
+  makeBtn(650,500,220,54,'냉동고 열기 →', ()=>{
+    if(!ppeFace || !ppeGlove){
+      addMistake('LN2 저온화상·바이알 파열 위험 무시 (PPE 미착용 상태로 진행)', 1);
+    } else {
+      okMsg('PPE 착용 확인 완료');
+    }
+    goToStep(2);
+  });
+}
+
+// ---------- STEP 2: retrieve correct vial ----------
+const VIALS = [
+  {label:'CHO-K1\nClone 7A', correct:true},
+  {label:'CHO-K1\nClone 7B', correct:false},
+  {label:'CHO-K1\n(라벨 훼손)', correct:false},
+  {label:'CHO-K1 7A\n(유효기한 만료)', correct:false}
+];
+function setupStep2(){
+  const hdr2 = scene.add.text(20,90,'② 목표 세포주(CHO-K1 Clone 7A)에 해당하는 바이알을 오른쪽 트레이로 꺼내세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const tankBg = scene.add.rectangle(220,320,340,260,0x1b2a44).setStrokeStyle(2,0x3a5a8a);
+  const tankLbl = scene.add.text(220,190,'LN2 세포은행',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  const tray = scene.add.rectangle(700,320,220,180,0x1c8a6b,0.15).setStrokeStyle(2,0x1c8a6b);
+  const trayLbl = scene.add.text(700,220,'반출 트레이',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  scene.stepObjects.push(hdr2, tankBg, tankLbl, tray, trayLbl);
+
+  const positions = [[120,260],[320,260],[120,380],[320,380]];
+  VIALS.forEach((v,i)=>{
+    const [x,y] = positions[i];
+    const rect = scene.add.rectangle(x,y,90,60,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+    const txt = scene.add.text(x,y,v.label,{fontSize:'11px', color:'#ccd3e0', align:'center'}).setOrigin(0.5);
+    scene.input.setDraggable(rect);
+    const origX=x, origY=y;
+    rect.on('drag', (p,dx,dy)=>{ rect.x=dx; rect.y=dy; txt.x=dx; txt.y=dy; });
+    rect.on('dragend', ()=>{
+      const inTray = Phaser.Geom.Rectangle.Contains(new Phaser.Geom.Rectangle(590,230,220,180), rect.x, rect.y);
+      if(inTray){
+        if(v.correct){
+          okMsg('정확한 세포주를 확인했습니다.');
+          goToStep(3);
+        } else {
+          addMistake('바이알 라벨 오인 — 잘못된 바이알 인출 시도 (' + v.label.replace('\n',' ') + ')', 1);
+          rect.x=origX; rect.y=origY; txt.x=origX; txt.y=origY;
+        }
+      } else {
+        rect.x=origX; rect.y=origY; txt.x=origX; txt.y=origY;
+      }
+    });
+    scene.stepObjects.push(rect, txt);
+  });
+}
+
+// ---------- STEP 3: water bath thaw timing ----------
+function setupStep3(){
+  const hdr3 = scene.add.text(20,90,'③ 37°C 수조에서 해동하다가, 작은 얼음 결정이 남은 시점에 "지금 꺼내기"를 누르세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const bathBg = scene.add.rectangle(450,300,500,220,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+  const bathLbl = scene.add.text(450,190,'37°C 수조',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  const barBg = scene.add.rectangle(450,300,400,40,0x1a2230).setStrokeStyle(1,0x4a7a92);
+  const barFill = scene.add.rectangle(250,300,0,36,0x5fb0c9).setOrigin(0,0.5);
+  const pct = scene.add.text(450,350,'0%',{fontSize:'14px', color:'#e8ecf4'}).setOrigin(0.5);
+  scene.stepObjects.push(hdr3, bathBg, bathLbl, barBg, barFill, pct);
+  scene.bathBarFill = barFill;
+  scene.bathPctText = pct;
+
+  bathProgress = 0; bathRunning = true; bathDone=false;
+  const btn = makeBtn(450,470,240,54,'지금 꺼내기', ()=>{
+    if(!bathRunning) return;
+    bathRunning = false;
+    if(bathProgress < 50){
+      addMistake('미해동 상태로 조기 인출 — 얼음이 많이 남아있어 다음 공정 진행 불가', 1);
+    } else if(bathProgress <= 90){
+      okMsg('적절한 시점에 해동을 완료했습니다.');
+    } else {
+      addMistake('해동 과다 — 완전 액체화된 상태로 온도 스트레스 노출', 1);
+    }
+    goToStep(4);
+  });
+}
+function update(time, delta){
+  if(currentStep===3 && bathRunning){
+    bathProgress += delta/60;
+    if(bathProgress>100) bathProgress=100;
+    if(scene.bathBarFill){ scene.bathBarFill.width = 400*(bathProgress/100); }
+    if(scene.bathPctText){ scene.bathPctText.setText(Math.floor(bathProgress)+'%'); }
+    if(bathProgress>=100 && bathRunning){
+      bathRunning = false;
+      addMistake('해동 방치 — 자동으로 완전 액체화되어 온도 스트레스 노출', 2);
+      goToStep(4);
+    }
+  }
+}
+
+// ---------- STEP 4: disinfect + bring into cabinet ----------
+let disinfected=false;
+function setupStep4(){
+  disinfected=false;
+  const hdr4 = scene.add.text(20,90,'④ 바이알을 70% 에탄올로 소독한 뒤 클린벤치 안으로 옮기세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const vial = scene.add.rectangle(200,300,90,60,0x394159).setStrokeStyle(1,0x6a7690).setInteractive({draggable:true, useHandCursor:true});
+  const vialTxt = scene.add.text(200,300,'바이알',{fontSize:'13px', color:'#ccd3e0'}).setOrigin(0.5);
+  const chip = scene.add.text(200,240,'미소독',{fontSize:'12px', color:'#c94b3f'}).setOrigin(0.5);
+  const sprayBtn = makeBtn(200,420,180,50,'70% 에탄올 소독', ()=>{
+    disinfected = true;
+    chip.setText('소독됨'); chip.setColor('#1c8a6b');
+  });
+  const cabinet = scene.add.rectangle(680,300,320,220,0x1c8a6b,0.12).setStrokeStyle(2,0x1c8a6b);
+  const cabinetLbl = scene.add.text(680,190,'클린벤치(무균작업대)',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  scene.input.setDraggable(vial);
+  const origX=200, origY=300;
+  vial.on('drag',(p,dx,dy)=>{ vial.x=dx; vial.y=dy; vialTxt.x=dx; vialTxt.y=dy; chip.x=dx; chip.y=dy-60; });
+  vial.on('dragend', ()=>{
+    const inCabinet = Phaser.Geom.Rectangle.Contains(new Phaser.Geom.Rectangle(520,190,320,220), vial.x, vial.y);
+    if(inCabinet){
+      if(disinfected){ okMsg('무균적으로 반입되었습니다.'); goToStep(5); }
+      else{
+        addMistake('미소독 상태로 반입 시도 — 외부 오염원 유입 위험', 1);
+        vial.x=origX; vial.y=origY; vialTxt.x=origX; vialTxt.y=origY; chip.x=origX; chip.y=origY-60;
+      }
+    } else { vial.x=origX; vial.y=origY; vialTxt.x=origX; vialTxt.y=origY; chip.x=origX; chip.y=origY-60; }
+  });
+  scene.stepObjects.push(hdr4, vial, vialTxt, chip, cabinet, cabinetLbl);
+}
+
+// ---------- STEP 5: dropwise dilution ----------
+function setupStep5(){
+  dilutionClicks = 0; lastDilutionClick = 0;
+  const hdr5 = scene.add.text(20,90,'⑤ 예열된 배지에 세포현탁액을 "한 방울씩" 천천히 5회 첨가하세요. 너무 빠르게 연속 클릭하면 삼투압 쇼크가 발생합니다.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const medium = scene.add.rectangle(600,320,220,160,0x2a4a5c).setStrokeStyle(2,0x4a7a92);
+  const mediumLbl = scene.add.text(600,220,'예열된 배지',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  const counter = scene.add.text(600,320,'0 / 5',{fontSize:'22px', color:'#e8ecf4'}).setOrigin(0.5);
+  scene.stepObjects.push(hdr5, medium, mediumLbl, counter);
+  makeBtn(300,320,220,60,'한 방울 첨가', ()=>{
+    const now = Date.now();
+    if(lastDilutionClick && (now-lastDilutionClick) < 500){
+      addMistake('희석 속도 위반 — 너무 빠르게 첨가하여 삼투압 쇼크 위험', 1);
+      dilutionClicks = 0; counter.setText('0 / 5');
+      lastDilutionClick = now;
+      return;
+    }
+    lastDilutionClick = now;
+    dilutionClicks++;
+    counter.setText(dilutionClicks + ' / 5');
+    if(dilutionClicks>=5){
+      okMsg('희석이 안전하게 완료되었습니다.');
+      goToStep(6);
+    }
+  });
+}
+
+// ---------- STEP 6: centrifuge + DMSO removal ----------
+function setupStep6(){
+  centrifugeDone=false; supernatantRemoved=false; resuspended=false;
+  const hdr6 = scene.add.text(20,90,'⑥ 원심분리 후 DMSO가 남은 상등액을 신속히 제거하고, 신선한 배지로 재현탁하세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const centri = scene.add.circle(250,300,70,0x394159).setStrokeStyle(2,0x6a7690);
+  const centriLbl = scene.add.text(250,300,'원심\n분리기',{fontSize:'13px', color:'#ccd3e0', align:'center'}).setOrigin(0.5);
+  scene.stepObjects.push(hdr6, centri, centriLbl);
+  const startBtn = makeBtn(250,420,200,50,'원심분리 시작 (1000rpm/5분)', ()=>{
+    startBtn.disableInteractive();
+    startBtn.setFillStyle(0x555f77);
+    scene.time.delayedCall(1800, ()=>{
+      centrifugeDone = true;
+      okMsg('원심분리 완료 — 신속히 상등액을 제거하세요.');
+      revealRemovalTools();
+      exposureTimer = scene.time.delayedCall(4000, ()=>{
+        if(!supernatantRemoved){
+          addMistake('DMSO 노출 시간 초과 — 상등액 제거 지연으로 세포독성 위험', 1);
+        }
+      });
+    });
+  });
+}
+let exposureTimer=null;
+function revealRemovalTools(){
+  const tube = scene.add.rectangle(600,300,80,140,0x394159).setStrokeStyle(1,0x6a7690);
+  const liquid = scene.add.rectangle(600,340,70,55,0xb3894a,0.85);
+  const tubeLbl = scene.add.text(600,220,'튜브 (세포+DMSO 상등액)',{fontSize:'12px', color:'#9ad6c9'}).setOrigin(0.5);
+  scene.stepObjects.push(tube, liquid, tubeLbl);
+  const removeBtn = makeBtn(500,470,190,50,'① 상등액 제거', ()=>{
+    if(!centrifugeDone) return;
+    supernatantRemoved = true;
+    liquid.destroy();
+    if(exposureTimer) exposureTimer.remove();
+    okMsg('상등액을 제거했습니다.');
+  });
+  const resuspBtn = makeBtn(720,470,190,50,'② 신선 배지 재현탁', ()=>{
+    if(!supernatantRemoved){
+      addMistake('순서 오류 — 상등액 제거 전에 재현탁 시도', 1);
+      return;
+    }
+    resuspended = true;
+    okMsg('신선한 배지로 재현탁했습니다.');
+    goToStep(7);
+  });
+}
+
+// ---------- STEP 7: viability check & decision ----------
+function setupStep7(){
+  viability = Math.floor(70 + Math.random()*25);
+  const hdr7 = scene.add.text(20,90,'⑦ 세포 계수기로 생존율을 확인하고, 기준(80% 이상) 충족 여부에 맞게 판단하세요.', {fontSize:'15px', color:'#e8ecf4', wordWrap:{width:860}});
+  const counter = scene.add.rectangle(250,300,220,140,0x394159).setStrokeStyle(2,0x6a7690);
+  const counterLbl = scene.add.text(250,220,'세포 계수기',{fontSize:'14px', color:'#9ad6c9'}).setOrigin(0.5);
+  const readout = scene.add.text(250,300,'--- %',{fontSize:'26px', color:'#e8ecf4'}).setOrigin(0.5);
+  scene.stepObjects.push(hdr7, counter, counterLbl, readout);
+  makeBtn(250,420,220,50,'측정 실행 (트리판블루)', ()=>{
+    readout.setText(viability+'%');
+    readout.setColor(viability>=80?'#1c8a6b':'#c94b3f');
+    showDecisionButtons();
+  });
+}
+function showDecisionButtons(){
+  const b1 = makeBtn(620,270,220,54,'진탕 플라스크로 이동', ()=>{
+    if(viability>=80){ okMsg('기준 충족 — 다음 배양 단계로 이동합니다.'); }
+    else{ addMistake('생존율 기준(80%) 미달 상태로 다음 단계 진행 승인', 2); }
+    finishFlow();
+  });
+  const b2 = makeBtn(620,340,220,54,'재원심분리 필요 판단', ()=>{
+    if(viability>=80){ addMistake('불필요한 재작업 판단 — 기준을 이미 충족한 상태', 1); }
+    else{ okMsg('올바른 판단입니다 — 기준 미달 시 재작업이 필요합니다.'); }
+    finishFlow();
+  });
+}
+function finishFlow(){
+  scene.stepObjects.push(scene.add.text(20,470,'라벨(날짜·세포주명·계대번호) 작성을 완료합니다.', {fontSize:'14px', color:'#ccd3e0'}));
+  makeBtn(450,560,240,54,'라벨 작성 완료 → 종료', ()=>{
+    goToStep(8);
+  });
+}
+</script>
+</body>
+</html>
