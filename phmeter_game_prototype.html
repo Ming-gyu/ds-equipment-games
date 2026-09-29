@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pH 미터 3D 실전 게임 (프로토타입 — 심화판)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #0b1210;
+    color: #e7eeeb;
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, sans-serif;
+  }
+  .wrap { max-width: 1220px; margin: 20px auto; padding: 0 10px 30px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #93a69f; margin: 0 0 14px; line-height: 1.6; }
+  #gameWrap {
+    position: relative; width: 1200px; max-width: 100%; height: 700px;
+    display: flex; border-radius: 10px; overflow: hidden;
+    border: 1px solid #2a3b35; box-shadow: 0 12px 34px rgba(0,0,0,0.4);
+    background: #0b1210;
+  }
+  #canvasHost { position: relative; width: 680px; height: 700px; flex: none; cursor: grab; }
+  #canvasHost.dragging { cursor: grabbing; }
+  #canvasHost canvas { display: block; }
+  #hud { position: absolute; left: 12px; top: 10px; right: 12px; pointer-events: none; }
+  #hud .stepTitle { font-size: 15px; font-weight: bold; color: #e7eeeb; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  #hud .hint { font-size: 12px; color: #cfd8d4; margin-top: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); max-width: 540px; line-height: 1.5; }
+  #modelStatus { position: absolute; right: 12px; top: 10px; font-size: 10.5px; color: #6b7d76; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; }
+  #controlsHint { position: absolute; left: 12px; bottom: 46px; right: 12px; font-size: 10.5px; color: #93a69f; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; }
+  #feedback { position: absolute; left: 12px; bottom: 12px; right: 12px; font-size: 12.5px; color: #93a69f; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; }
+  #resultOverlay { position: absolute; inset: 0; background: rgba(0,0,0,0.72); display: none; align-items: center; justify-content: center; }
+  #resultPanel { width: 460px; background: #14201c; border: 1.5px solid #2a3b35; border-radius: 8px; padding: 26px; text-align: center; }
+  #resultPanel h3 { font-size: 16px; margin: 0 0 14px; color: #e7eeeb; }
+  #resultGrade { font-size: 22px; font-weight: bold; margin-bottom: 10px; }
+  #resultMistakes { font-size: 13px; color: #93a69f; margin-bottom: 14px; }
+  #resultNote { font-size: 11.5px; color: #6b7d76; line-height: 1.6; margin-bottom: 18px; }
+
+  #panel {
+    width: 220px; height: 700px; flex: none;
+    background: #14201c; border-left: 1px solid #2a3b35;
+    box-sizing: border-box; padding: 12px;
+    display: flex; flex-direction: column;
+    font-size: 11.5px; color: #93a69f;
+    overflow-y: auto;
+  }
+  #panel h2 { font-size: 12.5px; color: #4fbfae; margin: 12px 0 8px; }
+  #panel h2:first-child { margin-top: 0; }
+  #scoreBox { text-align: right; font-size: 11px; color: #93a69f; margin-bottom: 8px; }
+  .readoutBox { background: #0e1815; border: 1px solid #2a3b35; border-radius: 6px; padding: 8px 10px; margin-bottom: 4px; }
+  .readoutRow { display: flex; justify-content: space-between; font-size: 10.8px; padding: 2px 0; }
+  .readoutRow .k { color: #6b7d76; }
+  .readoutRow .v { color: #d9e4df; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: 6px; margin-bottom: 10px; }
+  #calcInput { flex: 1; font-family: inherit; font-size: 14px; background: #0e1815; color: #e7eeeb; border: 1.5px solid #35473f; border-radius: 6px; padding: 4px 8px; outline: none; width: 0; }
+  #calcInput:focus { border-color: #4fbfae; }
+  #calcLabel { font-size: 11px; color: #93a69f; margin-bottom: 4px; line-height: 1.5; }
+  button.btn3d { font-family: inherit; font-size: 11.5px; color: #e7eeeb; background: #1c2d27; border: 1.5px solid #35473f; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+  button.btn3d:hover { border-color: #4fbfae; }
+  button.btn3d:disabled { opacity: 0.35; cursor: default; }
+  button.btn3d.wide { width: 100%; margin-bottom: 8px; }
+  #decisionRow { display: flex; gap: 6px; margin-bottom: 10px; }
+  #decisionRow button { flex: 1; }
+  #stepListBox { margin-top: auto; font-size: 9.3px; color: #6b7d76; line-height: 1.55; padding-top: 8px; }
+  #stepListBox .active { color: #4fbfae; }
+
+  #manualPanel {
+    width: 300px; height: 700px; flex: none;
+    background: #fbfdfc; color: #33413c;
+    border-left: 1px solid #d8ded9;
+    box-sizing: border-box; padding: 18px 16px;
+    overflow-y: auto;
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, sans-serif;
+  }
+  #manualPanel .manualBadge { display: inline-block; font-size: 10px; font-weight: bold; letter-spacing: 0.3px; background: #e4f3ee; color: #1f8f78; padding: 3px 9px; border-radius: 10px; margin-bottom: 10px; }
+  #manualPanel h2 { font-size: 14.5px; margin: 0 0 8px; color: #1c2d27; }
+  #manualPanel .manualIntro { font-size: 11.5px; color: #5a6b64; line-height: 1.6; margin: 0 0 16px; padding-bottom: 14px; border-bottom: 1px dashed #d8ded9; }
+  #manualPanel .mstepsLabel { font-size: 10.5px; color: #93a69f; font-weight: bold; margin-bottom: 8px; }
+  #manualPanel .mstep { padding: 9px 10px; border-radius: 7px; margin-bottom: 5px; border-left: 3px solid transparent; transition: background 0.2s; }
+  #manualPanel .mstep .mtitle { font-weight: bold; font-size: 12px; color: #7c8a83; }
+  #manualPanel .mstep .mdesc { display: none; margin-top: 6px; font-size: 11.5px; color: #3d4c46; line-height: 1.6; }
+  #manualPanel .mstep.active { background: #eef7f4; border-left-color: #1f8f78; }
+  #manualPanel .mstep.active .mtitle { color: #146b58; }
+  #manualPanel .mstep.active .mdesc { display: block; }
+  #manualPanel .mstep.done .mtitle { color: #93a69f; }
+  #manualPanel .mdoneNote { margin-top: 14px; padding: 12px; background: #eef7f4; border-radius: 7px; font-size: 11.5px; color: #2c463d; line-height: 1.65; }
+
+  .note { margin-top: 14px; font-size: 12px; color: #6b7d76; line-height: 1.7; }
+
+  .devBox { margin-top: 20px; border: 1.5px solid #7a3330; background: #1c1211; border-radius: 10px; padding: 18px 20px 16px; max-width: 1200px; }
+  .devBox .devHead { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: bold; color: #f2a79e; margin: 0 0 4px; }
+  .devBox .devSub { font-size: 11.5px; color: #c99089; line-height: 1.6; margin: 0 0 14px; }
+  .devBox .devList { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 8px; }
+  .devBox .devList::-webkit-scrollbar { width: 8px; }
+  .devBox .devList::-webkit-scrollbar-thumb { background: #5c3330; border-radius: 4px; }
+  .devBox .devList::-webkit-scrollbar-track { background: #241715; }
+  .devBox .devCase { background: #241715; border: 1px solid #4a2c29; border-radius: 8px; padding: 12px 14px; }
+  .devBox .devCaseTitle { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 12.5px; font-weight: bold; color: #f4b8b0; margin: 0 0 6px; }
+  .devBox .devSeverity { font-size: 9.5px; font-weight: bold; padding: 1.5px 8px; border-radius: 8px; letter-spacing: 0.2px; }
+  .devBox .devSeverity.major { background: #5c2320; color: #ffb3a8; }
+  .devBox .devSeverity.minor { background: #4a3a1e; color: #e8c37a; }
+  .devBox .devDesc { font-size: 11.8px; color: #d8c3c0; line-height: 1.68; margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🧪 pH 미터 실전 게임 — 3D 프로토타입 (심화판)</h1>
+  <p class="sub">전극을 3D 공간에서 직접 드래그해 보관액→세척→온도 확인→2점 보정(pH 7.00 / pH 4.01)→slope 판정→시료 측정까지 진행합니다. 네른스트 방정식(E = E7 − S·(pH−7))에 기반해 온도별 이론 slope, 실측 slope(%), offset을 실제로 계산하며 판정합니다.</p>
+  <div id="gameWrap">
+    <div id="canvasHost">
+      <div id="hud">
+        <div class="stepTitle" id="stepTitle"></div>
+        <div class="hint" id="hintText"></div>
+      </div>
+      <div id="modelStatus">3D 모델 없음 — 기본 도형으로 표시 중</div>
+      <div id="controlsHint">마우스 드래그(빈 공간): 시점 회전 · 휠: 확대/축소 · 방향키: 시점 회전 · 전극 드래그: 이동</div>
+      <div id="feedback"></div>
+      <div id="resultOverlay">
+        <div id="resultPanel">
+          <h3 id="resultTitle">측정 사이클 완료</h3>
+          <div id="resultGrade"></div>
+          <div id="resultMistakes"></div>
+          <div id="resultNote">보관·세척 습관, 안정화 대기, slope 판정 정확도, Nernst 역산 계산이 모두 결과에 반영됩니다.</div>
+          <button class="btn3d" id="retryBtn">다시 하기 (새 조건)</button>
+        </div>
+      </div>
+    </div>
+    <div id="panel">
+      <div id="scoreBox">실수 0회</div>
+
+      <h2>측정 기록</h2>
+      <div class="readoutBox">
+        <div class="readoutRow"><span class="k">버퍼 온도</span><span class="v" id="rTemp">--</span></div>
+        <div class="readoutRow"><span class="k">이론 Slope</span><span class="v" id="rTheoSlope">--</span></div>
+        <div class="readoutRow"><span class="k">E(pH7, offset)</span><span class="v" id="rE7">--</span></div>
+        <div class="readoutRow"><span class="k">E(pH4)</span><span class="v" id="rE4">--</span></div>
+        <div class="readoutRow"><span class="k">실측 Slope</span><span class="v" id="rSlope">--</span></div>
+        <div class="readoutRow"><span class="k">시료 mV</span><span class="v" id="rSample">--</span></div>
+      </div>
+
+      <h2>계산·판단</h2>
+      <div id="calcLabel">전극을 드래그해 단계를 진행하세요.</div>
+      <div class="row">
+        <input id="calcInput" type="number" step="0.01" placeholder="">
+        <button class="btn3d" id="calcBtn">확인</button>
+      </div>
+      <div id="decisionRow">
+        <button class="btn3d" id="decisionYesBtn">예</button>
+        <button class="btn3d" id="decisionNoBtn">아니오</button>
+      </div>
+      <button class="btn3d wide" id="readBtn">측정값 판독</button>
+      <button class="btn3d wide" id="ackBtn">확인·다음</button>
+
+      <div id="stepListBox"></div>
+    </div>
+    <div id="manualPanel">
+      <div class="manualBadge">📖 학습 설명서</div>
+      <h2>🧪 pH 미터란?</h2>
+      <p class="manualIntro">유리 전극과 기준 전극 사이의 전위차(mV)를 측정해, 네른스트 방정식으로 pH를 환산해 표시하는 기구예요. 표시값을 그대로 믿기 전에, 알려진 pH의 표준 버퍼로 "이 전극이 지금 얼마나 정직하게 반응하는지"부터 확인(보정)해야 합니다.</p>
+      <div class="mstepsLabel">단계별 의미 (진행에 따라 자동으로 강조돼요)</div>
+      <div id="manualSteps"></div>
+    </div>
+  </div>
+  <p class="note">※ 이 버전은 3D 엔진(Three.js) 위에서 조작감을 검증하는 프로토타입입니다. 실제 3D 모델(정교하게 만든 전극·미터기 형태) 대신 기본 도형으로 위치·비율만 표현했으며, GLB 3D 모델을 추가하면 자동으로 도형을 대체하도록 코드에 확장 지점(MODEL_B64)을 미리 마련해 두었습니다. 온도·offset·slope·시료 pH는 매 판마다 물리적으로 일관된 값(네른스트 식 기반)으로 무작위 생성됩니다.</p>
+  <div class="devBox">
+    <p class="devHead">🚨 자주 등장하는 일탈(Deviation) 사례</p>
+    <p class="devSub">pH 미터는 "표시값이 그럴듯해 보이는 것"과 "실제로 정확한 것"이 다를 수 있어, 보정 관리 소홀이 가장 흔한 일탈 원인입니다.</p>
+    <div class="devList">
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 전극 유리막 건조 방치 <span class="devSeverity major">중대</span></p>
+          <p class="devDesc">보관액 없이 전극을 공기 중에 방치해 유리막이 건조된 사례. 재수화에 수 시간이 걸리고, 그 사이 slope가 급격히 낮아져 보정 자체가 규격을 벗어나는 원인이 됩니다.</p>
+        </div>
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 버퍼 간 세척 생략 <span class="devSeverity major">중대</span></p>
+          <p class="devDesc">pH 7.00 버퍼에서 pH 4.01 버퍼로 세척 없이 바로 이동해 두 용액이 섞인 사례. 두 보정점 모두 신뢰할 수 없게 되어 이후 slope·offset 계산이 무의미해집니다.</p>
+        </div>
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 안정화 전 판독 <span class="devSeverity minor">경미</span></p>
+          <p class="devDesc">전위(mV)가 아직 드리프트 중인데 표시값을 즉시 기록한 사례. 값은 그럴듯해 보이지만 재현성이 떨어져, 같은 시료를 다시 재면 다른 값이 나옵니다.</p>
+        </div>
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 온도보정 누락 <span class="devSeverity major">중대</span></p>
+          <p class="devDesc">버퍼·시료의 실제 온도를 반영하지 않고 25°C 기준 이론 slope(59.16mV/pH)로 계산한 사례. 온도가 크게 다르면 계산된 pH에 체계적 오차가 생깁니다.</p>
+        </div>
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 규격 미달 slope로 측정 강행 <span class="devSeverity major">중대</span></p>
+          <p class="devDesc">실측 slope가 허용범위(보통 92~105%)를 벗어났는데도 재보정 없이 시료를 측정해 결과를 보고한 사례. 후속 조사에서 데이터 전체가 무효 처리되는 대표적인 OOS 원인입니다.</p>
+        </div>
+        <div class="devCase">
+          <p class="devCaseTitle">⚠ 전극 유리막에 기포 부착 <span class="devSeverity minor">경미</span></p>
+          <p class="devDesc">전극 팁의 기포가 용액과의 접촉을 방해해 응답이 느려지고 값이 튀는 사례. 육안 확인·가볍게 흔들어 기포를 제거하는 습관으로 예방됩니다.</p>
+        </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CW = 680, CH = 700;
+
+  var COLORS = {
+    bench: 0x1c2d27, liquidStorage: 0x8fd0dd, liquidRinse: 0xcfeaf5,
+    liquidPH7: 0xd7c548, liquidPH4: 0xd1584f, liquidSample: 0xb9c4a8,
+    zoneFill: 0x223028, zoneLine: 0x35473f, zoneLineActive: 0x4fbfae,
+    electrodeBody: 0x22282a, electrodeGlass: 0xbfd6d2, meterBody: 0x1c2d27, cable: 0x0e1815
+  };
+
+  var ZONE_RADIUS = 0.85;
+  var HOVER_Y = 2.55;
+  var DIP_Y = 1.55;
+
+  var ZONES = {
+    storage: { x: -4.6, z: -1.5, kind: 'cup', label: '전극 보관액\n(KCl)', liquidColor: COLORS.liquidStorage },
+    rinse:   { x: -2.5, z: -1.5, kind: 'cup', label: '증류수\n세척', liquidColor: COLORS.liquidRinse },
+    paper:   { x: -2.5, z: 1.1, kind: 'paper', label: '전극 와이퍼' },
+    ph7:     { x: -0.1, z: -1.5, kind: 'cup', label: 'pH 7.00\n표준버퍼', liquidColor: COLORS.liquidPH7 },
+    ph4:     { x: 2.2, z: -1.5, kind: 'cup', label: 'pH 4.01\n표준버퍼', liquidColor: COLORS.liquidPH4 },
+    sample:  { x: 4.5, z: -1.5, kind: 'cup', label: '미지시료', liquidColor: COLORS.liquidSample }
+  };
+
+  // ================= SCENARIO (randomized each playthrough, physically consistent via Nernst) =================
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function round(v, d) { var f = Math.pow(10, d); return Math.round(v * f) / f; }
+
+  var scenario = (function () {
+    var tempC = round(rand(18, 30), 1);
+    var offsetE7 = round(rand(-20, 20), 1);        // mV, asymmetry potential at pH7
+    var slopePercent = round(rand(88, 103), 1);     // % of theoretical Nernst slope
+    var sampleTruePH = round(rand(4.5, 9.0), 1);
+
+    var sTheo = 0.1984 * (tempC + 273.15);          // mV/pH, Nernst theoretical slope at tempC
+    var sMeasured = sTheo * slopePercent / 100;
+    var e7 = offsetE7;
+    var e4 = e7 + 3 * sMeasured;                    // moving pH7 -> pH4 (ΔpH = -3): E = E7 - S(pH-7)
+    var eSample = e7 - sMeasured * (sampleTruePH - 7);
+
+    return {
+      tempC: tempC, offsetE7: offsetE7, slopePercent: slopePercent, sampleTruePH: sampleTruePH,
+      sTheo: sTheo, sMeasured: sMeasured, e7: e7, e4: e4, eSample: eSample
+    };
+  })();
+
+  function recalcScenarioAfterRecalibration() {
+    // used when the trainee correctly rejects an out-of-spec slope and re-cleans/re-calibrates
+    scenario.slopePercent = round(rand(93, 101), 1);
+    scenario.sMeasured = scenario.sTheo * scenario.slopePercent / 100;
+    scenario.e4 = scenario.e7 + 3 * scenario.sMeasured;
+    scenario.eSample = scenario.e7 - scenario.sMeasured * (scenario.sampleTruePH - 7);
+  }
+
+  var state = {
+    step: 1,
+    mistakes: 0,
+    hardFail: false,
+    lastRinsed: false,
+    stabilized: false,
+    stableTimer: null,
+    currentDip: null,        // zone id electrode is currently dipped into, or null
+    lastRestPos: { x: ZONES.storage.x, z: ZONES.storage.z },
+    e7Read: null, e4Read: null, sampleRead: null, slopeAnswer: null
+  };
+
+  // ================= THREE.JS SETUP =================
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1210);
+  scene.fog = new THREE.Fog(0x0b1210, 14, 26);
+
+  var camera = new THREE.PerspectiveCamera(45, CW / CH, 0.1, 100);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(CW, CH);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  document.getElementById('canvasHost').appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  var dirLight = new THREE.DirectionalLight(0xffffff, 0.75);
+  dirLight.position.set(5, 10, 4);
+  scene.add(dirLight);
+  var fillLight = new THREE.DirectionalLight(0x3fa9f5, 0.15);
+  fillLight.position.set(-6, 4, -4);
+  scene.add(fillLight);
+
+  var benchGeo = new THREE.BoxGeometry(14, 0.4, 9);
+  var benchMat = new THREE.MeshStandardMaterial({ color: COLORS.bench, roughness: 0.9 });
+  var bench = new THREE.Mesh(benchGeo, benchMat);
+  bench.position.y = -0.2;
+  scene.add(bench);
+  var grid = new THREE.GridHelper(14, 14, 0x2a3b35, 0x1c2925);
+  grid.position.y = 0.005;
+  scene.add(grid);
+
+  function makeLabelSprite(text, color) {
+    var lines = text.split('\n');
+    var canvas = document.createElement('canvas');
+    var pad = 8, fontSize = 30;
+    canvas.width = 256; canvas.height = 44 * lines.length + pad * 2;
+    var ctx = canvas.getContext('2d');
+    ctx.font = 'bold ' + fontSize + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color || '#cfe8e2';
+    lines.forEach(function (line, i) { ctx.fillText(line, canvas.width / 2, pad + 22 + i * 44); });
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    var mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    var sprite = new THREE.Sprite(mat);
+    var scale = 0.011;
+    sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
+    return sprite;
+  }
+
+  // ---- build zones (cups / paper) ----
+  Object.keys(ZONES).forEach(function (key) {
+    var z = ZONES[key];
+    z.id = key;
+    var group = new THREE.Group();
+    group.position.set(z.x, 0, z.z);
+
+    if (z.kind === 'cup') {
+      var cupGeo = new THREE.CylinderGeometry(0.55, 0.46, 1.0, 20, 1, true);
+      var cupMat = new THREE.MeshStandardMaterial({ color: 0x3a4a44, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 0.42, side: THREE.DoubleSide });
+      var cupMesh = new THREE.Mesh(cupGeo, cupMat);
+      cupMesh.position.y = 0.5;
+      group.add(cupMesh);
+      var floor = new THREE.Mesh(new THREE.CircleGeometry(0.46, 20), new THREE.MeshStandardMaterial({ color: 0x2a2f2c }));
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = 0.02;
+      group.add(floor);
+      var liqGeo = new THREE.CylinderGeometry(0.44, 0.4, 1, 20);
+      var liqMat = new THREE.MeshStandardMaterial({ color: z.liquidColor, roughness: 0.25, transparent: true, opacity: 0.88 });
+      var liqMesh = new THREE.Mesh(liqGeo, liqMat);
+      liqMesh.scale.y = 0.62;
+      liqMesh.position.y = 0.02 + (0.62 * 1 * 0.5);
+      group.add(liqMesh);
+      var edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.55, 0.46, 1.0, 20, 1)), new THREE.LineBasicMaterial({ color: COLORS.zoneLine }));
+      edges.position.y = 0.5;
+      group.add(edges);
+      z.edges = edges;
+    } else if (z.kind === 'paper') {
+      var pGeo = new THREE.BoxGeometry(1.0, 0.03, 1.0);
+      var pMat = new THREE.MeshStandardMaterial({ color: 0xdfe6e2, roughness: 0.95 });
+      var pMesh = new THREE.Mesh(pGeo, pMat);
+      pMesh.position.y = 0.02;
+      group.add(pMesh);
+      var pedges = new THREE.LineSegments(new THREE.EdgesGeometry(pGeo), new THREE.LineBasicMaterial({ color: COLORS.zoneLine }));
+      pedges.position.y = 0.02;
+      group.add(pedges);
+      z.edges = pedges;
+    }
+
+    var label = makeLabelSprite(z.label, '#cfe8e2');
+    label.position.set(0, z.kind === 'cup' ? 1.55 : 0.75, 0);
+    group.add(label);
+
+    var ring = new THREE.Mesh(
+      new THREE.RingGeometry(ZONE_RADIUS - 0.06, ZONE_RADIUS, 32),
+      new THREE.MeshBasicMaterial({ color: COLORS.zoneLineActive, transparent: true, opacity: 0, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    group.add(ring);
+    z.ring = ring;
+
+    scene.add(group);
+    z.group = group;
+  });
+
+  function highlightZone(z, active) {
+    z.ring.material.opacity = active ? 0.85 : 0;
+    if (z.edges) z.edges.material.color.set(active ? COLORS.zoneLineActive : COLORS.zoneLine);
+  }
+
+  // ---- pH meter (fixed instrument) ----
+  var meter = new THREE.Group();
+  meter.position.set(0.9, 0, 2.4);
+  scene.add(meter);
+  var meterBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.1, 0.55), new THREE.MeshStandardMaterial({ color: COLORS.meterBody, roughness: 0.55 }));
+  meterBodyMesh.position.y = 0.95;
+  meter.add(meterBodyMesh);
+  var screenCanvas = document.createElement('canvas');
+  screenCanvas.width = 320; screenCanvas.height = 180;
+  var screenCtx = screenCanvas.getContext('2d');
+  var screenTex = new THREE.CanvasTexture(screenCanvas);
+  var screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.62), new THREE.MeshBasicMaterial({ map: screenTex }));
+  screenMesh.position.set(0, 1.05, 0.276);
+  meter.add(screenMesh);
+  var meterConnector = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 10), new THREE.MeshStandardMaterial({ color: 0x111815 }));
+  meterConnector.position.set(-0.75, 1.3, 0.15);
+  meterConnector.rotation.z = Math.PI / 2.3;
+  meter.add(meterConnector);
+
+  function drawScreen(lines, accentColor) {
+    screenCtx.fillStyle = '#0c1512';
+    screenCtx.fillRect(0, 0, screenCanvas.width, screenCanvas.height);
+    screenCtx.strokeStyle = '#1f3730';
+    screenCtx.lineWidth = 4;
+    screenCtx.strokeRect(2, 2, screenCanvas.width - 4, screenCanvas.height - 4);
+    screenCtx.fillStyle = accentColor || '#7fe8c9';
+    screenCtx.textAlign = 'left';
+    screenCtx.textBaseline = 'middle';
+    var y = 34;
+    lines.forEach(function (line, i) {
+      screenCtx.font = (i === 0 ? 'bold 30px monospace' : '18px monospace');
+      screenCtx.fillStyle = i === 0 ? (accentColor || '#7fe8c9') : '#9fb8ae';
+      screenCtx.fillText(line, 16, y);
+      y += (i === 0 ? 40 : 28);
+    });
+    screenTex.needsUpdate = true;
+  }
+  drawScreen(['-- mV', '전극을 이동하세요']);
+
+  // ---- cable (updated every frame between meter connector and electrode cap) ----
+  var cableMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 6), new THREE.MeshStandardMaterial({ color: COLORS.cable }));
+  scene.add(cableMesh);
+  function updateCable(fromV, toV) {
+    var mid = new THREE.Vector3().addVectors(fromV, toV).multiplyScalar(0.5);
+    var dist = fromV.distanceTo(toV);
+    cableMesh.position.copy(mid);
+    cableMesh.scale.set(1, Math.max(0.001, dist), 1);
+    var dir = new THREE.Vector3().subVectors(toV, fromV).normalize();
+    var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    cableMesh.quaternion.copy(quat);
+  }
+
+  // ---- electrode (draggable) ----
+  var electrode = new THREE.Group();
+  electrode.position.set(ZONES.storage.x, DIP_Y, ZONES.storage.z);
+  scene.add(electrode);
+
+  var eBody = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 1.5, 16), new THREE.MeshStandardMaterial({ color: COLORS.electrodeBody, roughness: 0.4 }));
+  eBody.position.y = -0.75;
+  electrode.add(eBody);
+  var eShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.09, 0.9, 16), new THREE.MeshStandardMaterial({ color: COLORS.electrodeGlass, roughness: 0.15, transparent: true, opacity: 0.5 }));
+  eShaft.position.y = -1.95;
+  electrode.add(eShaft);
+  var eBulb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 14), new THREE.MeshStandardMaterial({ color: COLORS.electrodeGlass, roughness: 0.1, transparent: true, opacity: 0.6 }));
+  eBulb.position.y = -2.45;
+  electrode.add(eBulb);
+  var eCap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.18, 12), new THREE.MeshStandardMaterial({ color: 0x0e1815, roughness: 0.5 }));
+  eCap.position.y = 0.09;
+  electrode.add(eCap);
+  var eLabel = makeLabelSprite('전극', '#cfe8e2');
+  eLabel.position.set(0, 0.55, 0);
+  electrode.add(eLabel);
+
+  var hitboxGeo = new THREE.BoxGeometry(0.6, 3.2, 0.6);
+  var hitboxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.0001, depthWrite: false });
+  var hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
+  hitbox.position.y = -1.0;
+  electrode.add(hitbox);
+
+  // ================= GLB MODEL HOOK (progressive enhancement — off by default) =================
+  // No GLB models are embedded in this build (see project notes). If sculpted models for the
+  // electrode / meter / cups become available later, base64-embed them into MODEL_B64 below and
+  // this block will load & swap them in automatically; on any failure the primitive shapes above
+  // simply remain visible and the game stays fully playable, exactly like the micropipette build.
+  var MODEL_B64 = { electrode: null, meter: null };
+  var modelStatusEl = document.getElementById('modelStatus');
+  if (typeof THREE.GLTFLoader === 'function' && (MODEL_B64.electrode || MODEL_B64.meter)) {
+    var gltfLoader = new THREE.GLTFLoader();
+    if (MODEL_B64.electrode) {
+      gltfLoader.load(MODEL_B64.electrode, function (gltf) {
+        var model = gltf.scene;
+        electrode.remove(eBody); electrode.remove(eShaft); electrode.remove(eBulb); electrode.remove(eCap);
+        electrode.add(model);
+        if (modelStatusEl) modelStatusEl.style.display = 'none';
+      }, undefined, function (err) { console.warn('electrode GLTF load failed, keeping primitive shape', err); });
+    }
+    if (MODEL_B64.meter) {
+      gltfLoader.load(MODEL_B64.meter, function (gltf) {
+        var model = gltf.scene;
+        meter.remove(meterBodyMesh);
+        meter.add(model);
+        if (modelStatusEl) modelStatusEl.style.display = 'none';
+      }, undefined, function (err) { console.warn('meter GLTF load failed, keeping primitive shape', err); });
+    }
+  } else if (modelStatusEl) {
+    modelStatusEl.style.display = 'block';
+  }
+
+  // ================= CAMERA ORBIT (custom, mouse + keyboard) =================
+  var camState = { radius: 15, theta: -0.7, phi: 1.0, target: new THREE.Vector3(0.5, 0.6, 0) };
+  function updateCamera() {
+    var p = camState;
+    p.phi = Math.max(0.2, Math.min(1.45, p.phi));
+    p.radius = Math.max(7, Math.min(24, p.radius));
+    var sinPhiRadius = Math.sin(p.phi) * p.radius;
+    camera.position.x = p.target.x + sinPhiRadius * Math.sin(p.theta);
+    camera.position.z = p.target.z + sinPhiRadius * Math.cos(p.theta);
+    camera.position.y = p.target.y + Math.cos(p.phi) * p.radius;
+    camera.lookAt(p.target);
+  }
+  updateCamera();
+
+  var keysHeld = {};
+  window.addEventListener('keydown', function (e) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(e.key) !== -1) e.preventDefault();
+    keysHeld[e.key] = true;
+  });
+  window.addEventListener('keyup', function (e) { keysHeld[e.key] = false; });
+  function applyKeyboardCamera() {
+    var rotSpeed = 0.028, zoomSpeed = 0.18;
+    if (keysHeld['ArrowLeft']) camState.theta -= rotSpeed;
+    if (keysHeld['ArrowRight']) camState.theta += rotSpeed;
+    if (keysHeld['ArrowUp']) camState.phi -= rotSpeed;
+    if (keysHeld['ArrowDown']) camState.phi += rotSpeed;
+    if (keysHeld['w'] || keysHeld['W']) camState.radius -= zoomSpeed;
+    if (keysHeld['s'] || keysHeld['S']) camState.radius += zoomSpeed;
+  }
+
+  // ================= MOUSE INTERACTION =================
+  var raycaster = new THREE.Raycaster();
+  var mouseNDC = new THREE.Vector2();
+  var dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -HOVER_Y);
+  var dragMode = null;
+  var lastPointer = { x: 0, y: 0 };
+  var canvasHost = document.getElementById('canvasHost');
+
+  function setMouseNDC(clientX, clientY) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    mouseNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  }
+  function pointerDown(clientX, clientY) {
+    setMouseNDC(clientX, clientY);
+    lastPointer.x = clientX; lastPointer.y = clientY;
+    raycaster.setFromCamera(mouseNDC, camera);
+    var hit = raycaster.intersectObject(hitbox, false);
+    if (hit.length > 0 && state.step !== 12) {
+      dragMode = 'electrode';
+      electrode.position.y = HOVER_Y;
+      canvasHost.classList.add('dragging');
+    } else {
+      dragMode = 'orbit';
+      canvasHost.classList.add('dragging');
+    }
+  }
+  function pointerMove(clientX, clientY) {
+    if (!dragMode) return;
+    var dx = clientX - lastPointer.x, dy = clientY - lastPointer.y;
+    lastPointer.x = clientX; lastPointer.y = clientY;
+    if (dragMode === 'orbit') {
+      camState.theta -= dx * 0.006;
+      camState.phi -= dy * 0.006;
+    } else if (dragMode === 'electrode') {
+      setMouseNDC(clientX, clientY);
+      raycaster.setFromCamera(mouseNDC, camera);
+      var pt = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(dragPlane, pt)) {
+        electrode.position.x = Math.max(-6.2, Math.min(6.2, pt.x));
+        electrode.position.z = Math.max(-3.8, Math.min(3.8, pt.z));
+        updateCurrentTarget();
+      }
+    }
+  }
+  function pointerUp() {
+    if (dragMode === 'electrode') settleElectrode();
+    dragMode = null;
+    canvasHost.classList.remove('dragging');
+  }
+  renderer.domElement.addEventListener('mousedown', function (e) { pointerDown(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', function (e) { pointerMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', function () { pointerUp(); });
+  renderer.domElement.addEventListener('touchstart', function (e) { var t = e.touches[0]; pointerDown(t.clientX, t.clientY); }, { passive: true });
+  renderer.domElement.addEventListener('touchmove', function (e) { var t = e.touches[0]; pointerMove(t.clientX, t.clientY); }, { passive: true });
+  renderer.domElement.addEventListener('touchend', function () { pointerUp(); });
+  renderer.domElement.addEventListener('wheel', function (e) { e.preventDefault(); camState.radius += e.deltaY * 0.01; }, { passive: false });
+
+  var hoveredZoneId = null;
+  function updateCurrentTarget() {
+    var found = null;
+    Object.keys(ZONES).forEach(function (key) {
+      var z = ZONES[key];
+      var dx = electrode.position.x - z.x, dz = electrode.position.z - z.z;
+      var within = Math.sqrt(dx * dx + dz * dz) < ZONE_RADIUS;
+      if (within) found = z.id;
+      highlightZone(z, within);
+    });
+    hoveredZoneId = found;
+  }
+  updateCurrentTarget();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    applyKeyboardCamera();
+    updateCamera();
+    var capWorld = new THREE.Vector3();
+    eCap.getWorldPosition(capWorld);
+    var connWorld = new THREE.Vector3();
+    meterConnector.getWorldPosition(connWorld);
+    updateCable(connWorld, capWorld);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ================= GAME LOGIC =================
+
+  function mistake(msg) {
+    state.mistakes++;
+    updateScore();
+    showFeedback(msg, false);
+  }
+  function ok(msg) { showFeedback(msg, true); }
+
+  function settleElectrode() {
+    if (!hoveredZoneId) {
+      // dropped in open space -> return to last valid resting spot
+      electrode.position.x = state.lastRestPos.x;
+      electrode.position.z = state.lastRestPos.z;
+      electrode.position.y = DIP_Y;
+      updateCurrentTarget();
+      return;
+    }
+    electrode.position.x = ZONES[hoveredZoneId].x;
+    electrode.position.z = ZONES[hoveredZoneId].z;
+    electrode.position.y = DIP_Y;
+    state.lastRestPos = { x: ZONES[hoveredZoneId].x, z: ZONES[hoveredZoneId].z };
+    state.currentDip = hoveredZoneId;
+    onDip(hoveredZoneId);
+  }
+
+  function startStabilize(finalMV, colorHex) {
+    state.stabilized = false;
+    if (state.stableTimer) clearTimeout(state.stableTimer);
+    var t0 = Date.now();
+    var noisyStart = finalMV + rand(-18, 18);
+    function tick() {
+      var elapsed = Date.now() - t0;
+      var p = Math.min(1, elapsed / 2600);
+      var shown = noisyStart + (finalMV - noisyStart) * p + (1 - p) * rand(-2, 2);
+      drawScreen([round(shown, 1) + ' mV', p < 1 ? '안정화 중…' : '안정화 완료'], colorHex);
+      if (p < 1) requestAnimationFrame(tick);
+      else state.stabilized = true;
+    }
+    tick();
+    state.stableTimer = setTimeout(function () { state.stabilized = true; }, 2650);
+  }
+
+  function onDip(zoneId) {
+    if (zoneId === 'rinse') {
+      state.lastRinsed = true;
+      drawScreen(['-- mV', '세척 중…']);
+      ok('세척 완료');
+      return;
+    }
+    if (zoneId === 'paper') {
+      if (state.step === 2) {
+        ok('물기 제거 완료 — 온도 확인 단계로 이동');
+        setStep(3);
+      }
+      drawScreen(['-- mV', '물기 제거']);
+      return;
+    }
+    if (zoneId === 'storage') {
+      drawScreen(['-- mV', '보관 중']);
+      if (state.step === 2) {
+        mistake('세척 순서를 건너뛰고 보관액으로 되돌아갔습니다. 인출 → 세척 → 물기 제거 순서를 지키세요.');
+      }
+      if (state.step === 12) {
+        ok('전극을 보관액에 재보관했습니다.');
+        finishGame();
+      }
+      return;
+    }
+    if (zoneId === 'ph7') {
+      if (state.step === 2) {
+        mistake('세척 없이 전극을 버퍼에 담갔습니다 (교차오염 위험). 전극을 인출해 먼저 증류수로 세척하세요.');
+        return;
+      }
+      if (state.step !== 4) { drawScreen(['-- mV', '지금 단계가 아닙니다']); return; }
+      if (!state.lastRinsed) mistake('세척 없이 이전 용액이 묻은 채로 pH 7.00 버퍼에 담갔습니다 (교차오염).');
+      state.lastRinsed = false;
+      startStabilize(scenario.e7, '#d7c548');
+      return;
+    }
+    if (zoneId === 'ph4') {
+      if (state.step !== 5) { drawScreen(['-- mV', '지금 단계가 아닙니다']); return; }
+      if (!state.lastRinsed) mistake('세척 없이 pH 7.00 버퍼에서 pH 4.01 버퍼로 바로 이동했습니다 (교차오염).');
+      state.lastRinsed = false;
+      startStabilize(scenario.e4, '#e08a5f');
+      return;
+    }
+    if (zoneId === 'sample') {
+      if (state.step !== 8) { drawScreen(['-- mV', '지금 단계가 아닙니다']); return; }
+      if (!state.lastRinsed) mistake('세척 없이 시료에 전극을 담갔습니다 (교차오염 및 규정 위반).');
+      state.lastRinsed = false;
+      startStabilize(scenario.eSample, '#8fd0dd');
+      return;
+    }
+  }
+
+  document.getElementById('readBtn').addEventListener('click', function () {
+    if (state.step === 4 && state.currentDip === 'ph7') {
+      if (!state.stabilized) mistake('전위가 아직 드리프트 중인데 판독했습니다 (안정화 대기 부족).');
+      state.e7Read = state.stabilized ? scenario.e7 : scenario.e7 + rand(-8, 8);
+      document.getElementById('rE7').textContent = round(state.e7Read, 1) + ' mV';
+      ok('1차 보정(pH 7.00) 판독 완료');
+      setStep(5);
+    } else if (state.step === 5 && state.currentDip === 'ph4') {
+      if (!state.stabilized) mistake('전위가 아직 드리프트 중인데 판독했습니다 (안정화 대기 부족).');
+      state.e4Read = state.stabilized ? scenario.e4 : scenario.e4 + rand(-8, 8);
+      document.getElementById('rE4').textContent = round(state.e4Read, 1) + ' mV';
+      ok('2차 보정(pH 4.01) 판독 완료');
+      setStep(6);
+    } else if (state.step === 8 && state.currentDip === 'sample') {
+      if (!state.stabilized) mistake('전위가 아직 드리프트 중인데 판독했습니다 (안정화 대기 부족).');
+      state.sampleRead = state.stabilized ? scenario.eSample : scenario.eSample + rand(-8, 8);
+      document.getElementById('rSample').textContent = round(state.sampleRead, 1) + ' mV';
+      ok('시료 판독 완료');
+      setStep(9);
+    } else {
+      showFeedback('지금 판독할 단계가 아닙니다.', false);
+    }
+  });
+
+  document.getElementById('ackBtn').addEventListener('click', function () {
+    if (state.step === 1) {
+      ok('전극 상태 확인 완료');
+      setStep(2);
+    } else if (state.step === 3) {
+      ok('온도 확인 완료 — 1차 보정으로 이동');
+      setStep(4);
+    }
+  });
+
+  document.getElementById('calcBtn').addEventListener('click', function () {
+    var v = parseFloat(document.getElementById('calcInput').value);
+    if (isNaN(v)) { mistake('값을 입력하세요.'); return; }
+    if (state.step === 6) {
+      var correctSlope = (state.e4Read - state.e7Read) / 3;
+      if (Math.abs(v - correctSlope) <= 1.0) {
+        state.slopeAnswer = v;
+        var pct = round(Math.abs(v) / scenario.sTheo * 100, 1);
+        document.getElementById('rSlope').textContent = round(v, 1) + ' mV/pH (' + pct + '%)';
+        state._slopePctComputed = pct;
+        ok('slope 계산 정답: ' + round(v, 1) + ' mV/pH (이론 대비 ' + pct + '%)');
+        setStep(7);
+      } else {
+        mistake('slope 계산이 틀렸습니다. (E4−E7)/3 을 다시 계산해보세요.');
+      }
+    } else if (state.step === 9) {
+      var correctPH = 7 - (state.sampleRead - state.e7Read) / state.slopeAnswer;
+      if (Math.abs(v - correctPH) <= 0.05) {
+        document.getElementById('rSample').textContent = round(state.sampleRead, 1) + ' mV → pH ' + round(v, 2);
+        ok('Nernst 역산 정답: pH ' + round(v, 2));
+        setStep(10);
+      } else {
+        mistake('pH 역산이 틀렸습니다. pH = 7 − (E시료 − E7) / slope 식을 다시 확인하세요.');
+      }
+    }
+    document.getElementById('calcInput').value = '';
+  });
+
+  document.getElementById('decisionYesBtn').addEventListener('click', function () { onDecision(true); });
+  document.getElementById('decisionNoBtn').addEventListener('click', function () { onDecision(false); });
+
+  function onDecision(yes) {
+    if (state.step === 7) {
+      var withinSpec = state._slopePctComputed >= 92 && state._slopePctComputed <= 105;
+      if (withinSpec) {
+        if (yes) { ok('slope 정상 — 시료 측정으로 진행'); setStep(8); }
+        else { mistake('slope는 정상 범위인데 불필요하게 재보정을 선택했습니다.'); setStep(8); }
+      } else {
+        if (!yes) {
+          ok('slope 미달을 정확히 판단했습니다. 재보정 진행: 전극 세척 후 다시 2점 보정합니다.');
+          recalcScenarioAfterRecalibration();
+          document.getElementById('rE4').textContent = '--';
+          document.getElementById('rSlope').textContent = '--';
+          setStep(5);
+        } else {
+          state.hardFail = true;
+          mistake('규격 미달 slope(' + state._slopePctComputed + '%)인데도 "측정 가능"으로 판단해 시료를 측정하려 했습니다 — 데이터 신뢰성에 치명적입니다.');
+          setStep(8);
+        }
+      }
+    } else if (state.step === 10) {
+      if (yes) { ok('재현성 확인 절차를 반영했습니다.'); setStep(11); }
+      else { mistake('시료 재측정을 통한 재현성 확인은 표준 절차입니다.'); setStep(11); }
+    }
+  }
+
+  function finishGame() {
+    setStep(12);
+    showResult();
+  }
+
+  // ---------- step / UI ----------
+  var STEP_LABELS = [
+    '1. 전극 상태 점검',
+    '2. 인출·세척·물기 제거',
+    '3. 버퍼 온도 확인',
+    '4. 1차 보정 (pH 7.00)',
+    '5. 2차 보정 (pH 4.01)',
+    '6. slope 계산',
+    '7. slope 판정',
+    '8. 시료 측정',
+    '9. Nernst 역산 (pH 계산)',
+    '10. 재현성 확인',
+    '11. 전극 세척·재보관'
+  ];
+
+  var MANUAL_STEPS = [
+    { title: '1. 전극 준비 (인출·세척·건조)', body: '보관액 성분이 버퍼에 섞이면 그 보정점은 오염되고, 유리막이 마르면 반응이 느려져요. 매 측정 전 "인출 → 증류수 세척 → 가볍게 물기 제거"를 습관화해야 합니다.' },
+    { title: '2. 온도 확인과 네른스트 기울기', body: 'E = E7 − (RTln10/F)·(pH−7) 에서 (RTln10/F)가 바로 이론 slope예요. 25°C에서는 약 59.16mV/pH지만, 온도가 다르면 이 값 자체가 달라지므로 온도를 먼저 확인해야 합니다.' },
+    { title: '3. 1차 보정 (pH 7.00)', body: 'pH 7.00을 기준점으로 잡아 전극의 offset(비대칭전위)을 구해요. 이상적으로는 0mV에 가깝지만, 실제 전극은 ±수십 mV의 offset을 가질 수 있습니다.' },
+    { title: '4. 2차 보정 (pH 4.01)과 slope 계산', body: '두 보정점의 전위차를 pH 차이(3)로 나누면 실제 slope(mV/pH)가 나와요. 이론 slope 대비 %로 환산하면 전극이 얼마나 "건강한지" 판단할 수 있습니다.' },
+    { title: '5. slope 판정 (허용범위 92~105%)', body: '규격을 벗어난 전극은 세척·재보정 없이 그대로 쓰면 안 돼요. 이 판단을 건너뛰고 측정을 강행하면 이후 나온 모든 값이 무효가 됩니다.' },
+    { title: '6. 시료 측정과 pH 역산', body: '측정된 mV를 그대로 pH로 읽으면 안 되고, pH = 7 − (E시료−E7)/slope 식에 보정값을 대입해야 실제 pH가 나와요. 2점 보정을 하지 않으면 표시값 자체가 부정확할 수 있습니다.' },
+    { title: '7. 재현성 확인과 전극 보관', body: '같은 시료를 다시 측정해 값이 일치하는지 확인하는 것은 표준 절차예요. 사용 후 전극을 세척해 보관액에 다시 담가야 다음 사용자가 바로 쓸 수 있습니다.' }
+  ];
+  var MANUAL_DONE_NOTE = '온도 확인 → 2점 보정(offset·slope) → slope 판정 → 시료 측정 → Nernst 역산 → 재현성 확인 → 재보관까지, pH 측정의 신뢰도는 "표시값을 얼마나 잘 검증했는가"에서 나와요.';
+
+  function manualIndexForStep(n) {
+    if (n <= 2) return 0;
+    if (n === 3) return 1;
+    if (n === 4) return 2;
+    if (n === 5 || n === 6) return 3;
+    if (n === 7) return 4;
+    if (n === 8 || n === 9) return 5;
+    if (n === 10 || n === 11) return 6;
+    return -1;
+  }
+
+  function renderManual(n) {
+    var box = document.getElementById('manualSteps');
+    if (!box) return;
+    if (n >= 12) {
+      box.innerHTML = MANUAL_STEPS.map(function (s) {
+        return '<div class="mstep done"><div class="mtitle">✓ ' + s.title + '</div></div>';
+      }).join('') + '<div class="mdoneNote">' + MANUAL_DONE_NOTE + '</div>';
+      return;
+    }
+    var activeIdx = manualIndexForStep(n);
+    box.innerHTML = MANUAL_STEPS.map(function (s, i) {
+      var active = (i === activeIdx);
+      return '<div class="mstep' + (active ? ' active' : '') + '">' +
+        '<div class="mtitle">' + s.title + '</div>' +
+        '<div class="mdesc">' + s.body + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function setStep(n) {
+    state.step = n;
+    state.stabilized = false;
+    var titles = {
+      1: '1단계 — 전극 상태 점검', 2: '2단계 — 인출·세척·물기 제거', 3: '3단계 — 버퍼 온도 확인',
+      4: '4단계 — 1차 보정 (pH 7.00)', 5: '5단계 — 2차 보정 (pH 4.01)', 6: '6단계 — slope 계산',
+      7: '7단계 — slope 판정', 8: '8단계 — 시료 측정', 9: '9단계 — Nernst 역산 (pH 계산)',
+      10: '10단계 — 재현성 확인', 11: '11단계 — 전극 세척·재보관', 12: '완료!'
+    };
+    var hints = {
+      1: '전극 유리막에 균열이나 큰 기포가 없는지 확인한 뒤 "확인·다음"을 누르세요.',
+      2: '전극을 드래그해 보관액에서 꺼내 증류수 컵(세척)에 담갔다가, 와이퍼 위로 옮겨 물기를 제거하세요.',
+      3: '오른쪽 패널의 "확인·다음"으로 버퍼 온도와 이론 slope를 확인하세요.',
+      4: '전극을 pH 7.00 버퍼에 담그고 전위가 안정될 때까지 기다린 뒤 "측정값 판독"을 누르세요.',
+      5: '전극을 세척한 뒤 pH 4.01 버퍼에 담그고, 안정화 후 "측정값 판독"을 누르세요.',
+      6: '오른쪽 패널에 (E4−E7)/3 값을 mV/pH 단위로 계산해 입력하세요.',
+      7: '계산된 slope(%)가 허용범위(92~105%)인지 판단해 "예/아니오"로 답하세요.',
+      8: '전극을 세척한 뒤 미지시료에 담그고, 안정화 후 "측정값 판독"을 누르세요.',
+      9: 'pH = 7 − (E시료−E7)/slope 식으로 시료의 pH를 계산해 입력하세요.',
+      10: '동일 시료를 재측정해 재현성을 확인해야 하는지 "예/아니오"로 답하세요.',
+      11: '전극을 세척한 뒤 보관액으로 다시 드래그해 넣으세요.',
+      12: '아래 결과를 확인하세요.'
+    };
+    document.getElementById('stepTitle').textContent = titles[n] || '';
+    document.getElementById('hintText').textContent = hints[n] || '';
+    document.getElementById('stepListBox').innerHTML = STEP_LABELS.map(function (s, i) {
+      var active = (n === i + 1);
+      return '<div class="' + (active ? 'active' : '') + '">' + (active ? '▶ ' : '&nbsp;&nbsp;&nbsp;') + s + '</div>';
+    }).join('');
+
+    var calcLabels = {
+      6: '(E4 − E7) / 3 의 값을 mV/pH 단위로 입력하세요.',
+      9: 'pH = 7 − (E시료 − E7) / slope 를 계산해 입력하세요.'
+    };
+    document.getElementById('calcLabel').textContent = calcLabels[n] || '전극을 드래그해 단계를 진행하세요.';
+    var calcActive = (n === 6 || n === 9);
+    document.getElementById('calcInput').disabled = !calcActive;
+    document.getElementById('calcBtn').disabled = !calcActive;
+
+    var decisionActive = (n === 7 || n === 10);
+    document.getElementById('decisionYesBtn').disabled = !decisionActive;
+    document.getElementById('decisionNoBtn').disabled = !decisionActive;
+    if (n === 7) {
+      document.getElementById('decisionYesBtn').textContent = '측정 가능';
+      document.getElementById('decisionNoBtn').textContent = '재보정 필요';
+    } else if (n === 10) {
+      document.getElementById('decisionYesBtn').textContent = '예';
+      document.getElementById('decisionNoBtn').textContent = '아니오';
+    }
+
+    document.getElementById('readBtn').disabled = !(n === 4 || n === 5 || n === 8);
+    document.getElementById('ackBtn').disabled = !(n === 1 || n === 3);
+
+    if (n === 3) {
+      document.getElementById('rTemp').textContent = scenario.tempC + ' °C';
+      document.getElementById('rTheoSlope').textContent = round(scenario.sTheo, 2) + ' mV/pH';
+    }
+
+    renderManual(n);
+  }
+
+  function showFeedback(msg, isOk) {
+    var el = document.getElementById('feedback');
+    el.textContent = (isOk ? '✓ ' : '⚠ ') + msg;
+    el.style.color = isOk ? '#4fbfae' : '#e0735f';
+  }
+  function updateScore() {
+    document.getElementById('scoreBox').textContent = '실수 ' + state.mistakes + '회';
+  }
+  function showResult() {
+    var grade, gradeColor;
+    if (state.hardFail) {
+      grade = 'C — 규격 미달 전극으로 측정 강행 (데이터 무효)';
+      gradeColor = '#e0735f';
+    } else {
+      grade = state.mistakes === 0 ? 'S — 완벽한 보정·측정 SOP 수행' : state.mistakes <= 4 ? 'B — 양호, 세부 동작 점검 필요' : 'C — 재도전 권장';
+      gradeColor = state.mistakes === 0 ? '#4fbfae' : state.mistakes <= 4 ? '#d9b564' : '#e0735f';
+    }
+    document.getElementById('resultTitle').textContent = '시료 pH ' + scenario.sampleTruePH + ' 측정 사이클 완료';
+    var gEl = document.getElementById('resultGrade');
+    gEl.textContent = grade; gEl.style.color = gradeColor;
+    document.getElementById('resultMistakes').textContent = '실수 횟수: ' + state.mistakes + '회';
+    document.getElementById('resultOverlay').style.display = 'flex';
+  }
+
+  document.getElementById('retryBtn').addEventListener('click', function () { location.reload(); });
+
+  setStep(1);
+  updateScore();
+
+})();
+</script>
+</body>
+</html>
